@@ -1,0 +1,19 @@
+name: Auto PR (dev → main)
+
+on:
+  push:
+    branches: [dev]
+
+jobs:
+  create-pr:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@v6
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          base: main
+          branch: dev
+          title: "Auto PR: dev → main"
+          body: "Automated PR from dev branch"
