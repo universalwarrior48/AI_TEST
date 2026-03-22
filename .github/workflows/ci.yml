@@ -19,5 +19,7 @@ jobs:
           rsync -av --exclude .git ./ space/
           cd space
           git add .
+          git config --global user.email "universalwarrior48@gmail.com"
+          git config --global user.name "Sagar Pohekar"
           git commit -m "Deploy from GitHub"
           git push https://$HF_TOKEN@huggingface.co/spaces/UniversalWarrior48/AI_TEST main
