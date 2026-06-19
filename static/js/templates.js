@@ -325,7 +325,14 @@ function getAllTemplates() {
     return [...TEMPLATES].sort((a, b) => a.complexity - b.complexity);
 }
 
-// Export for use in other modules
+// Export for browser global access
+if (typeof window !== 'undefined') {
+    window.TEMPLATES = TEMPLATES;
+    window.getTemplate = getTemplate;
+    window.getAllTemplates = getAllTemplates;
+}
+
+// Export for Node.js/CommonJS
 if (typeof module !== 'undefined' && module.exports) {
     module.exports = { TEMPLATES, getTemplate, getAllTemplates };
 }
