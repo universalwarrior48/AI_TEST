@@ -8,7 +8,7 @@ class SimulationEngine {
         this.running = false;
         this.components = {};
         this.connections = [];
-        this.metrics = {};
+        this.metrics = {}; // Will be populated by calculateMetrics
         this.particles = [];
         this.lastUpdate = 0;
         this.animationFrame = null;
@@ -22,7 +22,11 @@ class SimulationEngine {
         this.connections = connections;
         this.running = true;
         this.lastUpdate = Date.now();
-        this.particles = []; // Clear any existing particles
+        this.particles = [];
+        
+        // Initialize metrics immediately so dashboard isn't empty
+        this.calculateMetrics();
+        
         this.animate();
     }
 
@@ -57,27 +61,29 @@ class SimulationEngine {
         const delta = (now - this.lastUpdate) / 1000;
         this.lastUpdate = now;
 
-        // Initialize metrics
+        // Reset metrics for all components first
         this.metrics = {};
         for (const compId in this.components) {
             const comp = this.components[compId];
             const isActive = comp.active !== false;
+            
             this.metrics[compId] = {
                 qps: 0,
-                latency: comp.config.latency || 10,
+                latency: comp.config?.latency || 10,
                 throughput: 0,
                 errorRate: 0,
                 health: isActive ? 'healthy' : 'unhealthy',
                 connections: 0
             };
             
-            // Dead components have zero metrics
             if (!isActive) {
                 this.metrics[compId].health = 'unhealthy';
+                this.metrics[compId].qps = 0;
+                this.metrics[compId].throughput = 0;
             }
         }
 
-        // Simulate traffic flow from clients
+        // Simulate traffic flow starting from clients
         for (const compId in this.components) {
             const comp = this.components[compId];
             
@@ -85,12 +91,11 @@ class SimulationEngine {
             if (comp.active === false) continue;
             
             if (comp.type === 'client') {
-                // Client generates load
-                const baseQps = comp.config.qps || 100;
+                const baseQps = comp.config?.qps || 100;
                 this.metrics[compId].qps = baseQps;
-                this.metrics[compId].throughput = baseQps * (1 - (comp.config.failureRate || 0));
+                this.metrics[compId].throughput = baseQps * (1 - (comp.config?.failureRate || 0));
                 
-                // Propagate to connected components
+                // Propagate load to connected components
                 this.propagateLoad(compId, baseQps);
             }
         }
@@ -114,19 +119,19 @@ class SimulationEngine {
 
             const targetComp = this.components[targetId];
             
-            // Skip dead components - they don't process traffic
+            // Skip dead components
             if (targetComp.active === false) continue;
             
-            const capacity = targetComp.config.qps || 1000;
-            const failureRate = targetComp.config.failureRate || 0;
-            const latency = targetComp.config.latency || 10;
+            const capacity = targetComp.config?.qps || 1000;
+            const failureRate = targetComp.config?.failureRate || 0;
+            const latency = targetComp.config?.latency || 10;
 
             // Calculate actual QPS considering capacity
             const actualQps = Math.min(qpsPerConnection, capacity);
             const errorRate = qpsPerConnection > capacity ? 
                 failureRate + 0.1 : failureRate * 0.5;
             
-            // Update metrics
+            // Accumulate metrics
             this.metrics[targetId].qps += Math.round(actualQps);
             this.metrics[targetId].throughput += Math.round(actualQps * (1 - errorRate));
             this.metrics[targetId].errorRate = Math.max(
@@ -142,7 +147,7 @@ class SimulationEngine {
                 this.metrics[targetId].health = 'degraded';
             }
 
-            // Continue propagating
+            // Continue propagating recursively
             this.propagateLoad(targetId, actualQps);
         }
     }
@@ -152,6 +157,9 @@ class SimulationEngine {
      */
     animate() {
         if (!this.running) return;
+
+        // Recalculate metrics every frame for live updates
+        this.calculateMetrics();
 
         this.updateParticles();
         this.renderParticles();
@@ -170,14 +178,13 @@ class SimulationEngine {
             const comp = this.components[compId];
             if (comp.active === false) continue;
             
-            // Check if this component has outgoing connections
             const hasOutgoing = this.connections.some(c => c.from === compId);
             if (!hasOutgoing) continue;
             
-            const qps = this.metrics[compId]?.qps || comp.config.qps || 10;
-            // Spawn particles based on QPS - higher QPS = more particles
+            const qps = this.metrics[compId]?.qps || comp.config?.qps || 10;
             const spawnRate = Math.min(qps / 50, 15);
-            if (Math.random() < spawnRate * 0.2) {
+            
+            if (Math.random() < spawnRate * 0.05) { // Adjusted probability
                 this.spawnParticle(compId);
             }
         }
@@ -188,22 +195,24 @@ class SimulationEngine {
             particle.progress += particle.speed;
 
             if (particle.progress >= 1) {
-                // Particle reached destination
                 const targetComp = this.components[particle.connection.to];
                 const sourceComp = this.components[particle.connection.from];
                 
-                // For cache: on miss, spawn particle to DB
+                // Handle Cache Miss logic
                 if (targetComp && targetComp.type === 'cache') {
-                    const hitRate = targetComp.config.hitRate || 0.8;
+                    const hitRate = targetComp.config?.hitRate || 0.8;
                     if (Math.random() > hitRate) {
-                        // Cache miss - find connection from cache to DB and spawn particle
+                        // Cache miss: find DB connection
                         const dbConnection = this.connections.find(c => 
                             c.from === particle.connection.to && 
                             this.components[c.to] && 
                             this.components[c.to].type === 'database'
                         );
+                        
                         if (dbConnection) {
                             const dbComp = this.components[dbConnection.to];
+                            
+                            // Spawn particle to DB
                             this.particles.push({
                                 connection: dbConnection,
                                 from: targetComp,
@@ -213,22 +222,26 @@ class SimulationEngine {
                                 type: 'cache-miss'
                             });
                             
-                            // Also spawn return particle from DB to Cache
+                            // Spawn return particle (DB -> Cache) after delay
                             setTimeout(() => {
-                                const returnConn = this.connections.find(c => 
+                                if (!this.running) return;
+                                // Try to find explicit return connection, else reverse
+                                let returnConn = this.connections.find(c => 
                                     c.from === dbConnection.to && c.to === dbConnection.from
                                 );
-                                // If no direct return connection, use the same connection reversed
-                                if (returnConn || dbConnection) {
-                                    this.particles.push({
-                                        connection: returnConn || {from: dbConnection.to, to: dbConnection.from},
-                                        from: dbComp,
-                                        to: targetComp,
-                                        progress: 0,
-                                        speed: particle.speed,
-                                        type: 'cache-response'
-                                    });
+                                
+                                if (!returnConn) {
+                                    returnConn = { from: dbConnection.to, to: dbConnection.from };
                                 }
+
+                                this.particles.push({
+                                    connection: returnConn,
+                                    from: dbComp,
+                                    to: targetComp,
+                                    progress: 0,
+                                    speed: particle.speed,
+                                    type: 'cache-response'
+                                });
                             }, 200);
                         }
                     }
@@ -267,7 +280,6 @@ class SimulationEngine {
      * Get SVG path element for a connection
      */
     getPathElement(fromId, toId) {
-        // Look for path with data attributes
         let path = document.querySelector(`path[data-from="${fromId}"][data-to="${toId}"]`);
         if (!path) {
             path = document.querySelector(`path[data-from="${toId}"][data-to="${fromId}"]`);
@@ -282,14 +294,11 @@ class SimulationEngine {
         const layer = document.getElementById('particles-layer');
         if (!layer) return;
 
-        // Clear existing particles
         layer.innerHTML = '';
 
-        // Render each particle along the connection path
         for (const particle of this.particles) {
             const pathEl = this.getPathElement(particle.from.id, particle.to.id);
             if (!pathEl) {
-                // Fallback to straight line if path not found
                 this.renderFallbackParticle(layer, particle);
                 continue;
             }
@@ -301,13 +310,12 @@ class SimulationEngine {
                 const element = document.createElement('div');
                 element.className = 'particle';
                 
-                // Color based on type
                 if (particle.type === 'cache-miss') {
-                    element.style.backgroundColor = '#ff9800'; // Orange for cache miss
+                    element.style.backgroundColor = '#ff9800';
                 } else if (particle.type === 'cache-response') {
-                    element.style.backgroundColor = '#2196f3'; // Blue for response
+                    element.style.backgroundColor = '#2196f3';
                 } else {
-                    element.style.backgroundColor = '#00e676'; // Green for normal
+                    element.style.backgroundColor = '#00e676';
                 }
 
                 element.style.left = `${point.x - 4}px`;
@@ -315,14 +323,13 @@ class SimulationEngine {
 
                 layer.appendChild(element);
             } catch (e) {
-                // Fallback if path calculation fails
                 this.renderFallbackParticle(layer, particle);
             }
         }
     }
 
     /**
-     * Fallback particle rendering using straight lines
+     * Fallback particle rendering
      */
     renderFallbackParticle(layer, particle) {
         const element = document.createElement('div');
@@ -361,10 +368,9 @@ class SimulationEngine {
     }
 
     /**
-     * Add a connection to the simulation
+     * Add a connection
      */
     addConnection(connection) {
-        // Check if connection already exists
         const exists = this.connections.some(c => 
             (c.from === connection.from && c.to === connection.to) ||
             (c.from === connection.to && c.to === connection.from)
@@ -376,7 +382,7 @@ class SimulationEngine {
     }
 
     /**
-     * Remove a connection from the simulation
+     * Remove a connection
      */
     removeConnection(fromId, toId) {
         this.connections = this.connections.filter(c => 
@@ -395,11 +401,8 @@ class SimulationEngine {
 
 // Create global instance
 const simulationEngine = new SimulationEngine();
-
-// Expose to window for access from other scripts
 window.simulationEngine = simulationEngine;
 
-// Export for use in other modules
 if (typeof module !== 'undefined' && module.exports) {
     module.exports = SimulationEngine;
 }

@@ -938,10 +938,49 @@ function loadSavedState() {
  * Update metrics summary
  */
 function updateMetricsSummary() {
-    const compCount = Object.keys(state.components).length;
-    const connCount = state.connections.length;
-    const isRunning = simulationRunning ? 'Running' : 'Stopped';
-    metricsSummary.textContent = `Components: ${compCount} | Connections: ${connCount} | Status: ${isRunning}`;
+    const dashboardStatus = document.getElementById('dashboard-status');
+    const dashboardComponents = document.getElementById('dashboard-components');
+    const dashboardConnections = document.getElementById('dashboard-connections');
+    const dashboardQPS = document.getElementById('dashboard-qps');
+    const dashboardLatency = document.getElementById('dashboard-latency');
+    const dashboardThroughput = document.getElementById('dashboard-throughput');
+    const dashboardErrors = document.getElementById('dashboard-errors');
+
+    if (!window.simulationEngine) return;
+
+    const engine = window.simulationEngine;
+    const isRunning = engine.running;
+
+    // 1. Update Overall Status
+    if (dashboardStatus) {
+        dashboardStatus.textContent = isRunning ? 'Running' : 'Stopped';
+        dashboardStatus.className = isRunning ? 'status-badge running' : 'status-badge stopped';
+    }
+
+    // 2. Update Counts
+    if (dashboardComponents) {
+        dashboardComponents.textContent = Object.keys(engine.components).length;
+    }
+    if (dashboardConnections) {
+        dashboardConnections.textContent = engine.connections.length;
+    }
+
+    // 3. Update Performance Metrics (Live from Engine)
+    // Ensure metrics exist, default to 0 if not yet calculated
+    const metrics = engine.metrics || { qps: 0, latency: 0, throughput: 0, errorRate: 0 };
+
+    if (dashboardQPS) {
+        dashboardQPS.textContent = isRunning ? metrics.qps.toFixed(1) : '0.0';
+    }
+    if (dashboardLatency) {
+        dashboardLatency.textContent = isRunning ? metrics.latency.toFixed(0) + 'ms' : '0ms';
+    }
+    if (dashboardThroughput) {
+        dashboardThroughput.textContent = isRunning ? metrics.throughput.toFixed(1) + ' MB/s' : '0.0 MB/s';
+    }
+    if (dashboardErrors) {
+        dashboardErrors.textContent = isRunning ? (metrics.errorRate * 100).toFixed(1) + '%' : '0.0%';
+    }
 }
 
 /**
