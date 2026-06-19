@@ -514,11 +514,19 @@ function deleteComponent(componentId) {
 /**
  * Start simulation
  */
-function startSimulation() {
+async function startSimulation() {
     if (Object.keys(state.components).length === 0) {
         updateStatus('Add components first');
         return;
     }
+    
+    // Save state to backend and start simulation
+    await saveState();
+    fetch('/api/state', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ running: true })
+    });
     
     simulationEngine.start(state.components, state.connections);
     updateStatus('Simulation running');
@@ -529,7 +537,14 @@ function startSimulation() {
 /**
  * Stop simulation
  */
-function stopSimulation() {
+async function stopSimulation() {
+    // Stop backend simulation
+    await fetch('/api/state', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ running: false })
+    });
+    
     simulationEngine.stop();
     updateStatus('Simulation stopped');
     document.getElementById('btn-start').disabled = false;
@@ -539,6 +554,7 @@ function stopSimulation() {
     for (const compId in state.components) {
         updateComponentMetrics(compId, { qps: 0, latency: 0, throughput: 0, errorRate: 0, health: 'healthy' });
     }
+    updateMetricsSummary();
 }
 
 /**
