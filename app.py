@@ -24,12 +24,12 @@ lock = threading.Lock()
 
 def calculate_metrics():
     """Calculate metrics for all components based on connections and load."""
-    if not simulation_state['running']:
-        return
-    
     with lock:
         components = simulation_state['components']
         connections = simulation_state['connections']
+        
+        if not components or not simulation_state['running']:
+            return
         
         # Initialize metrics
         metrics = {}

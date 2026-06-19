@@ -19,6 +19,9 @@ const state = {
     panStart: { x: 0, y: 0 }
 };
 
+// Simulation running state
+let simulationRunning = false;
+
 // DOM Elements
 let canvasWrapper, componentsLayer, connectionsLayer, particlesLayer;
 let propertiesContent, statusText, metricsSummary;
@@ -550,9 +553,18 @@ async function stopSimulation() {
     document.getElementById('btn-start').disabled = false;
     document.getElementById('btn-stop').disabled = true;
     
-    // Clear metrics display
-    for (const compId in state.components) {
-        updateComponentMetrics(compId, { qps: 0, latency: 0, throughput: 0, errorRate: 0, health: 'healthy' });
+    if (response.ok) {
+        simulationRunning = false;
+        simulationEngine.stop();
+        updateStatus('Simulation stopped');
+        document.getElementById('btn-start').disabled = false;
+        document.getElementById('btn-stop').disabled = true;
+        
+        // Clear metrics display
+        for (const compId in state.components) {
+            updateComponentMetrics(compId, { qps: 0, latency: 0, throughput: 0, errorRate: 0, health: 'healthy' });
+        }
+        updateMetricsSummary();
     }
     updateMetricsSummary();
 }
@@ -578,10 +590,12 @@ function updateComponentMetrics(componentId, metrics) {
     const errorEl = document.getElementById(`${componentId}-error`);
     const healthEl = document.getElementById(`${componentId}-health`);
     
-    if (qpsEl) qpsEl.textContent = Math.round(metrics.qps);
-    if (latencyEl) latencyEl.textContent = Math.round(metrics.latency) + 'ms';
-    if (throughputEl) throughputEl.textContent = Math.round(metrics.throughput);
-    if (errorEl) errorEl.textContent = metrics.errorRate.toFixed(1) + '%';
+    if (!qpsEl || !latencyEl || !throughputEl || !errorEl) return;
+    
+    if (qpsEl) qpsEl.textContent = Math.round(metrics.qps || 0);
+    if (latencyEl) latencyEl.textContent = Math.round(metrics.latency || 0) + 'ms';
+    if (throughputEl) throughputEl.textContent = Math.round(metrics.throughput || 0);
+    if (errorEl) errorEl.textContent = (metrics.errorRate || 0).toFixed(1) + '%';
     
     if (healthEl) {
         healthEl.className = 'health-indicator';
