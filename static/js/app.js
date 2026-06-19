@@ -19,6 +19,9 @@ const state = {
     panStart: { x: 0, y: 0 }
 };
 
+// Simulation running state
+let simulationRunning = false;
+
 // DOM Elements
 let canvasWrapper, componentsLayer, connectionsLayer, particlesLayer;
 let propertiesContent, statusText, metricsSummary;
@@ -522,16 +525,19 @@ async function startSimulation() {
     
     // Save state to backend and start simulation
     await saveState();
-    fetch('/api/state', {
+    const response = await fetch('/api/state', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ running: true })
     });
     
-    simulationEngine.start(state.components, state.connections);
-    updateStatus('Simulation running');
-    document.getElementById('btn-start').disabled = true;
-    document.getElementById('btn-stop').disabled = false;
+    if (response.ok) {
+        simulationRunning = true;
+        simulationEngine.start(state.components, state.connections);
+        updateStatus('Simulation running');
+        document.getElementById('btn-start').disabled = true;
+        document.getElementById('btn-stop').disabled = false;
+    }
 }
 
 /**
@@ -539,22 +545,25 @@ async function startSimulation() {
  */
 async function stopSimulation() {
     // Stop backend simulation
-    await fetch('/api/state', {
+    const response = await fetch('/api/state', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ running: false })
     });
     
-    simulationEngine.stop();
-    updateStatus('Simulation stopped');
-    document.getElementById('btn-start').disabled = false;
-    document.getElementById('btn-stop').disabled = true;
-    
-    // Clear metrics display
-    for (const compId in state.components) {
-        updateComponentMetrics(compId, { qps: 0, latency: 0, throughput: 0, errorRate: 0, health: 'healthy' });
+    if (response.ok) {
+        simulationRunning = false;
+        simulationEngine.stop();
+        updateStatus('Simulation stopped');
+        document.getElementById('btn-start').disabled = false;
+        document.getElementById('btn-stop').disabled = true;
+        
+        // Clear metrics display
+        for (const compId in state.components) {
+            updateComponentMetrics(compId, { qps: 0, latency: 0, throughput: 0, errorRate: 0, health: 'healthy' });
+        }
+        updateMetricsSummary();
     }
-    updateMetricsSummary();
 }
 
 /**
@@ -590,10 +599,12 @@ function updateComponentMetrics(componentId, metrics) {
     const errorEl = document.getElementById(`${componentId}-error`);
     const healthEl = document.getElementById(`${componentId}-health`);
     
-    if (qpsEl) qpsEl.textContent = Math.round(metrics.qps);
-    if (latencyEl) latencyEl.textContent = Math.round(metrics.latency) + 'ms';
-    if (throughputEl) throughputEl.textContent = Math.round(metrics.throughput);
-    if (errorEl) errorEl.textContent = metrics.errorRate.toFixed(1) + '%';
+    if (!qpsEl || !latencyEl || !throughputEl || !errorEl) return;
+    
+    if (qpsEl) qpsEl.textContent = Math.round(metrics.qps || 0);
+    if (latencyEl) latencyEl.textContent = Math.round(metrics.latency || 0) + 'ms';
+    if (throughputEl) throughputEl.textContent = Math.round(metrics.throughput || 0);
+    if (errorEl) errorEl.textContent = (metrics.errorRate || 0).toFixed(1) + '%';
     
     if (healthEl) {
         healthEl.className = 'health-indicator';
@@ -731,7 +742,7 @@ function loadSavedState() {
 function updateMetricsSummary() {
     const compCount = Object.keys(state.components).length;
     const connCount = state.connections.length;
-    const isRunning = simulationEngine.running ? 'Running' : 'Stopped';
+    const isRunning = simulationRunning ? 'Running' : 'Stopped';
     metricsSummary.textContent = `Components: ${compCount} | Connections: ${connCount} | Status: ${isRunning}`;
 }
 
