@@ -22,6 +22,7 @@ class SimulationEngine {
         this.connections = connections;
         this.running = true;
         this.lastUpdate = Date.now();
+        this.particles = []; // Clear any existing particles
         this.animate();
     }
 
@@ -162,13 +163,16 @@ class SimulationEngine {
      * Update particle positions
      */
     updateParticles() {
-        // Spawn new particles from clients
+        const now = Date.now();
+        
+        // Spawn new particles from clients continuously while running
         for (const compId in this.components) {
             const comp = this.components[compId];
-            if (comp.type === 'client' && this.metrics[compId]?.qps > 0) {
-                // Spawn particles based on QPS
-                const spawnRate = Math.min(this.metrics[compId].qps / 100, 10);
-                if (Math.random() < spawnRate * 0.1) {
+            if (comp.type === 'client' && comp.active !== false) {
+                const qps = this.metrics[compId]?.qps || comp.config.qps || 100;
+                // Spawn particles based on QPS - higher QPS = more particles
+                const spawnRate = Math.min(qps / 100, 20);
+                if (Math.random() < spawnRate * 0.15) {
                     this.spawnParticle(compId);
                 }
             }
@@ -180,7 +184,17 @@ class SimulationEngine {
             particle.progress += particle.speed;
 
             if (particle.progress >= 1) {
-                // Particle reached destination
+                // Particle reached destination - handle special logic for cache/DB
+                const targetComp = this.components[particle.connection.to];
+                
+                // For cache: on miss, spawn particle to DB and back
+                if (targetComp && targetComp.type === 'cache' && particle.from.type !== 'database') {
+                    const hitRate = targetComp.config.hitRate || 0.9;
+                    if (Math.random() > hitRate) {
+                        // Cache miss - will be handled by next connection in chain
+                    }
+                }
+                
                 this.particles.splice(i, 1);
             }
         }

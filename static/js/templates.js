@@ -50,6 +50,7 @@ const TEMPLATES = [
             { from: 'client1', to: 'lb1' },
             { from: 'lb1', to: 'cache1' },
             { from: 'cache1', to: 'server1' },
+            { from: 'cache1', to: 'db1' },
             { from: 'server1', to: 'db1' }
         ]
     },

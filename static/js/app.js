@@ -71,6 +71,12 @@ function initEventListeners() {
     document.getElementById('btn-pan').addEventListener('click', () => setMode('pan'));
     document.getElementById('btn-dashboard').addEventListener('click', openDashboard);
     
+    // Check if autofit button exists (might not be in all templates)
+    const autofitBtn = document.getElementById('btn-autofit');
+    if (autofitBtn) {
+        autofitBtn.addEventListener('click', autofitComponents);
+    }
+    
     // Template selection
     templateSelect.addEventListener('change', (e) => {
         if (e.target.value) {
@@ -919,6 +925,49 @@ window.addEventListener('click', (e) => {
         closeDashboard();
     }
 });
+
+/**
+ * Autofit all components to screen
+ */
+function autofitComponents() {
+    const componentIds = Object.keys(state.components);
+    if (componentIds.length === 0) return;
+    
+    // Find bounds of all components
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    
+    for (const compId of componentIds) {
+        const comp = state.components[compId];
+        minX = Math.min(minX, comp.x);
+        minY = Math.min(minY, comp.y);
+        maxX = Math.max(maxX, comp.x + 140);
+        maxY = Math.max(maxY, comp.y + 80);
+    }
+    
+    // Get canvas dimensions
+    const canvasWidth = componentsLayer.clientWidth;
+    const canvasHeight = componentsLayer.clientHeight;
+    
+    // Calculate content dimensions
+    const contentWidth = maxX - minX;
+    const contentHeight = maxY - minY;
+    
+    // Calculate scale to fit with padding
+    const padding = 50;
+    const scaleX = (canvasWidth - padding * 2) / contentWidth;
+    const scaleY = (canvasHeight - padding * 2) / contentHeight;
+    const newScale = Math.min(1, Math.max(0.3, Math.min(scaleX, scaleY)));
+    
+    // Apply scale
+    state.scale = newScale;
+    
+    // Center content
+    state.panOffset.x = (canvasWidth - contentWidth * newScale) / 2 - minX * newScale;
+    state.panOffset.y = (canvasHeight - contentHeight * newScale) / 2 - minY * newScale;
+    
+    updateTransform();
+    updateStatus('Auto-fitted components to screen');
+}
 
 /**
  * Update status bar
