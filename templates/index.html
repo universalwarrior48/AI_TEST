@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>System Design Lab</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Header -->
+        <header class="header">
+            <h1>🏗️ System Design Lab</h1>
+            <div class="header-controls">
+                <button id="newBtn" class="btn btn-secondary">New</button>
+                <button id="saveBtn" class="btn btn-secondary">Save</button>
+                <button id="loadBtn" class="btn btn-secondary">Load</button>
+                <button id="exportBtn" class="btn btn-secondary">Export</button>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <div class="main-content">
+            <!-- Sidebar - Component Palette -->
+            <aside class="sidebar">
+                <h3>Components</h3>
+                <div class="component-palette">
+                    <div class="palette-item" draggable="true" data-type="client">
+                        <div class="component-icon client-icon">🖥️</div>
+                        <span>Client</span>
+                    </div>
+                    <div class="palette-item" draggable="true" data-type="load_balancer">
+                        <div class="component-icon lb-icon">⚖️</div>
+                        <span>Load Balancer</span>
+                    </div>
+                    <div class="palette-item" draggable="true" data-type="server">
+                        <div class="component-icon server-icon">🖧</div>
+                        <span>Server</span>
+                    </div>
+                    <div class="palette-item" draggable="true" data-type="database">
+                        <div class="component-icon db-icon">🗄️</div>
+                        <span>Database</span>
+                    </div>
+                    <div class="palette-item" draggable="true" data-type="cache">
+                        <div class="component-icon cache-icon">⚡</div>
+                        <span>Cache</span>
+                    </div>
+                    <div class="palette-item" draggable="true" data-type="api_gateway">
+                        <div class="component-icon gateway-icon">🚪</div>
+                        <span>API Gateway</span>
+                    </div>
+                    <div class="palette-item" draggable="true" data-type="message_queue">
+                        <div class="component-icon queue-icon">📨</div>
+                        <span>Message Queue</span>
+                    </div>
+                    <div class="palette-item" draggable="true" data-type="cdn">
+                        <div class="component-icon cdn-icon">🌐</div>
+                        <span>CDN</span>
+                    </div>
+                </div>
+
+                <h3>Templates</h3>
+                <div class="template-list" id="templateList">
+                    <!-- Templates will be loaded here -->
+                </div>
+
+                <h3>Actions</h3>
+                <div class="action-buttons">
+                    <button id="startBtn" class="btn btn-success">▶ Start</button>
+                    <button id="stopBtn" class="btn btn-danger">⏹ Stop</button>
+                    <button id="clearBtn" class="btn btn-warning">🗑 Clear</button>
+                </div>
+
+                <div class="zoom-controls">
+                    <button id="zoomIn">+</button>
+                    <button id="zoomOut">−</button>
+                    <button id="zoomReset">Reset</button>
+                </div>
+            </aside>
+
+            <!-- Canvas Area -->
+            <main class="canvas-container">
+                <div id="canvasWrapper" class="canvas-wrapper">
+                    <svg id="connectionsSvg" class="connections-svg"></svg>
+                    <div id="canvas" class="canvas"></div>
+                </div>
+            </main>
+
+            <!-- Properties Panel -->
+            <aside class="properties-panel" id="propertiesPanel">
+                <h3>Properties</h3>
+                <div id="propertiesContent">
+                    <p class="no-selection">Select a component to edit properties</p>
+                </div>
+            </aside>
+        </div>
+
+        <!-- Metrics Panel -->
+        <div class="metrics-panel" id="metricsPanel">
+            <h3>Real-time Metrics</h3>
+            <div id="metricsContent">
+                <p class="no-metrics">Start simulation to see metrics</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Connection Mode Indicator -->
+    <div id="connectionMode" class="connection-mode hidden">
+        <span>🔗 Connection Mode: Click on components to connect</span>
+        <button id="cancelConnection" class="btn btn-small">Cancel</button>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/component_types.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/simulation_engine.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/templates.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>
