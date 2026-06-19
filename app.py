@@ -118,6 +118,12 @@ def get_metrics():
     with lock:
         return jsonify(simulation_state['metrics'])
 
+@app.route('/api/simulations/<simulation_id>/metrics', methods=['GET'])
+def get_simulation_metrics(simulation_id):
+    """Get metrics for a specific simulation."""
+    with lock:
+        return jsonify(simulation_state['metrics'])
+
 @app.route('/api/component/<comp_id>', methods=['PUT'])
 def update_component(comp_id):
     data = request.json
