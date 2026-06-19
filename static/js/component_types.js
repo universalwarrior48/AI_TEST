@@ -1,106 +1,155 @@
-// Component Types Definition
+/**
+ * Component Types Definition
+ * Defines all available component types with their properties and configurations
+ */
+
 const COMPONENT_TYPES = {
     client: {
         name: 'Client',
         icon: '🖥️',
-        color: '#4a9eff',
+        color: '#58a6ff',
         defaultConfig: {
-            requests_per_sec: 100,
-            timeout_ms: 5000
-        }
+            qps: 100,
+            timeout: 5000,
+            connections: 10
+        },
+        description: 'End user or external service making requests'
     },
-    load_balancer: {
+    loadbalancer: {
         name: 'Load Balancer',
         icon: '⚖️',
-        color: '#a78bfa',
+        color: '#3fb950',
         defaultConfig: {
+            qps: 10000,
+            latency: 2,
             algorithm: 'round_robin',
-            qps_capacity: 2000,
-            latency_ms: 5,
-            max_connections: 1000
-        }
+            healthCheck: true
+        },
+        description: 'Distributes traffic across multiple servers'
     },
     server: {
         name: 'Server',
         icon: '🖧',
-        color: '#4ade80',
+        color: '#d29922',
         defaultConfig: {
-            qps_capacity: 1000,
-            latency_ms: 10,
-            max_connections: 500,
-            failure_rate: 0.01
-        }
+            qps: 1000,
+            latency: 10,
+            failureRate: 0.01,
+            connections: 100
+        },
+        description: 'Application server processing requests'
     },
     database: {
         name: 'Database',
         icon: '🗄️',
-        color: '#fbbf24',
+        color: '#f85149',
         defaultConfig: {
-            type: 'postgresql',
-            connections: 100,
-            latency_ms: 20,
-            storage_gb: 100
-        }
+            qps: 5000,
+            latency: 5,
+            connections: 50,
+            type: 'sql'
+        },
+        description: 'Data storage system'
     },
     cache: {
         name: 'Cache',
         icon: '⚡',
-        color: '#f87171',
+        color: '#a371f7',
         defaultConfig: {
-            capacity_mb: 512,
-            eviction_policy: 'lru',
-            hit_rate: 0.8,
-            latency_ms: 1
-        }
+            qps: 50000,
+            latency: 1,
+            hitRate: 0.9,
+            size: 1024
+        },
+        description: 'Fast data caching layer'
     },
-    api_gateway: {
+    apigateway: {
         name: 'API Gateway',
         icon: '🚪',
-        color: '#06b6d4',
+        color: '#1f6feb',
         defaultConfig: {
-            rate_limit: 10000,
-            latency_ms: 3,
-            max_connections: 5000
-        }
+            qps: 8000,
+            latency: 3,
+            rateLimit: 1000,
+            auth: true
+        },
+        description: 'Entry point for API requests'
     },
-    message_queue: {
+    queue: {
         name: 'Message Queue',
-        icon: '📨',
-        color: '#ec4899',
+        icon: '📬',
+        color: '#238636',
         defaultConfig: {
-            type: 'kafka',
-            throughput_mbps: 100,
-            retention_hours: 24
-        }
+            qps: 2000,
+            latency: 5,
+            maxSize: 10000,
+            type: 'fifo'
+        },
+        description: 'Asynchronous message processing'
     },
     cdn: {
         name: 'CDN',
         icon: '🌐',
-        color: '#8b5cf6',
+        color: '#8957e5',
         defaultConfig: {
-            edge_locations: 50,
-            cache_hit_rate: 0.9,
-            bandwidth_gbps: 10
-        }
+            qps: 100000,
+            latency: 1,
+            hitRate: 0.95,
+            locations: 10
+        },
+        description: 'Content delivery network'
     }
 };
 
-// Generate unique ID
+/**
+ * Get component type definition
+ * @param {string} type - Component type
+ * @returns {Object} Component definition
+ */
+function getComponentType(type) {
+    return COMPONENT_TYPES[type] || null;
+}
+
+/**
+ * Generate unique ID for components
+ * @returns {string} Unique ID
+ */
 function generateId() {
     return 'comp_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
 }
 
-// Get component display name
-function getComponentDisplayName(type) {
-    return COMPONENT_TYPES[type] ? COMPONENT_TYPES[type].name : type;
+/**
+ * Create a new component instance
+ * @param {string} type - Component type
+ * @param {number} x - X position
+ * @param {number} y - Y position
+ * @returns {Object} Component instance
+ */
+function createComponent(type, x, y) {
+    const compType = getComponentType(type);
+    if (!compType) {
+        console.error('Unknown component type:', type);
+        return null;
+    }
+
+    return {
+        id: generateId(),
+        type: type,
+        name: `${compType.name} ${Math.floor(Math.random() * 100)}`,
+        x: x,
+        y: y,
+        config: { ...compType.defaultConfig },
+        metrics: {
+            qps: 0,
+            latency: 0,
+            throughput: 0,
+            errorRate: 0,
+            health: 'healthy'
+        }
+    };
 }
 
-// Get component icon
-function getComponentIcon(type) {
-    return COMPONENT_TYPES[type] ? COMPONENT_TYPES[type].icon : '❓';
-}
-
-// Get component default config
-function getComponentDefaultConfig(type) {
-    return COMPONENT_TYPES[type] ? {...COMPONENT_TYPES[type].defaultConfig} : {};
+// Export for use in other modules
+if (typeof module !== 'undefined' && module.exports) {
+    module.exports = { COMPONENT_TYPES, getComponentType, generateId, createComponent };
 }

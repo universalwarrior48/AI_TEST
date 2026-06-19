@@ -1,526 +1,717 @@
-// Main Application - Handles UI, drag-drop, canvas, and user interactions
+/**
+ * Main Application Logic
+ * Handles drag-drop, canvas interactions, component management, and UI updates
+ */
 
-class SystemDesignApp {
-    constructor() {
-        this.canvas = document.getElementById('canvas');
-        this.canvasWrapper = document.getElementById('canvasWrapper');
-        this.connectionsSvg = document.getElementById('connectionsSvg');
-        this.propertiesPanel = document.getElementById('propertiesPanel');
-        this.propertiesContent = document.getElementById('propertiesContent');
-        this.metricsContent = document.getElementById('metricsContent');
-        
-        this.components = [];
-        this.connections = [];
-        this.selectedComponent = null;
-        this.isConnecting = false;
-        this.connectionStart = null;
-        this.simulationId = null;
-        this.simulationEngine = new SimulationEngine();
-        
-        // Canvas pan/zoom
-        this.scale = 1;
-        this.panX = 0;
-        this.panY = 0;
-        this.isPanning = false;
-        this.startPanX = 0;
-        this.startPanY = 0;
-        
-        // Drag state
-        this.draggedComponent = null;
-        this.dragOffsetX = 0;
-        this.dragOffsetY = 0;
-        
-        this.init();
-    }
+// Application State
+const state = {
+    components: {},
+    connections: [],
+    selectedComponent: null,
+    isDragging: false,
+    isConnecting: false,
+    connectSource: null,
+    dragOffset: { x: 0, y: 0 },
+    panMode: true,
+    scale: 1,
+    panOffset: { x: 0, y: 0 },
+    isPanning: false,
+    panStart: { x: 0, y: 0 }
+};
+
+// DOM Elements
+let canvasWrapper, componentsLayer, connectionsLayer, particlesLayer;
+let propertiesContent, statusText, metricsSummary;
+let templateSelect;
+
+/**
+ * Initialize the application
+ */
+document.addEventListener('DOMContentLoaded', () => {
+    // Get DOM elements
+    canvasWrapper = document.getElementById('canvas-wrapper');
+    componentsLayer = document.getElementById('components-layer');
+    connectionsLayer = document.getElementById('connections-layer');
+    particlesLayer = document.getElementById('particles-layer');
+    propertiesContent = document.getElementById('properties-content');
+    statusText = document.getElementById('status-text');
+    metricsSummary = document.getElementById('metrics-summary');
+    templateSelect = document.getElementById('template-select');
+
+    // Initialize event listeners
+    initEventListeners();
+    initPaletteDragDrop();
+    populateTemplates();
     
-    init() {
-        this.setupEventListeners();
-        this.setupDragDrop();
-        this.setupCanvasControls();
-        this.loadTemplates();
-        this.updateCanvasSize();
-        
-        // Auto-resize canvas on window resize
-        window.addEventListener('resize', () => this.updateCanvasSize());
-    }
+    // Start metrics refresh loop
+    setInterval(refreshMetrics, 500);
     
-    setupEventListeners() {
-        // Toolbar buttons
-        document.getElementById('newBtn')?.addEventListener('click', () => this.newSimulation());
-        document.getElementById('saveBtn')?.addEventListener('click', () => this.saveSimulation());
-        document.getElementById('loadBtn')?.addEventListener('click', () => this.loadSimulationDialog());
-        document.getElementById('exportBtn')?.addEventListener('click', () => this.exportSimulation());
-        document.getElementById('startBtn')?.addEventListener('click', () => this.startSimulation());
-        document.getElementById('stopBtn')?.addEventListener('click', () => this.stopSimulation());
-        document.getElementById('clearBtn')?.addEventListener('click', () => this.clearCanvas());
-        
-        // Zoom controls
-        document.getElementById('zoomIn')?.addEventListener('click', () => this.zoom(0.1));
-        document.getElementById('zoomOut')?.addEventListener('click', () => this.zoom(-0.1));
-        document.getElementById('zoomReset')?.addEventListener('click', () => this.resetZoom());
-        
-        // Connection mode cancel
-        document.getElementById('cancelConnection')?.addEventListener('click', () => this.cancelConnectionMode());
-    }
+    updateStatus('Ready - Drag components from palette or load a template');
+});
+
+/**
+ * Initialize event listeners
+ */
+function initEventListeners() {
+    // Canvas events
+    canvasWrapper.addEventListener('mousedown', handleCanvasMouseDown);
+    canvasWrapper.addEventListener('mousemove', handleCanvasMouseMove);
+    canvasWrapper.addEventListener('mouseup', handleCanvasMouseUp);
+    canvasWrapper.addEventListener('wheel', handleWheel);
     
-    setupDragDrop() {
-        // Palette items drag
-        document.querySelectorAll('.palette-item').forEach(item => {
-            item.addEventListener('dragstart', (e) => {
-                e.dataTransfer.setData('type', item.dataset.type);
-                e.dataTransfer.effectAllowed = 'copy';
-            });
-        });
-        
-        // Canvas drop
-        this.canvas.addEventListener('dragover', (e) => {
-            e.preventDefault();
-            e.dataTransfer.dropEffect = 'copy';
-        });
-        
-        this.canvas.addEventListener('drop', (e) => {
-            e.preventDefault();
-            const type = e.dataTransfer.getData('type');
-            if (type) {
-                const rect = this.canvas.getBoundingClientRect();
-                const x = (e.clientX - rect.left) / this.scale;
-                const y = (e.clientY - rect.top) / this.scale;
-                this.addComponent(type, x, y);
-            }
-        });
-    }
+    // Button events
+    document.getElementById('btn-start').addEventListener('click', startSimulation);
+    document.getElementById('btn-stop').addEventListener('click', stopSimulation);
+    document.getElementById('btn-clear').addEventListener('click', clearCanvas);
+    document.getElementById('btn-export').addEventListener('click', exportConfig);
+    document.getElementById('btn-connect').addEventListener('click', () => setMode('connect'));
+    document.getElementById('btn-pan').addEventListener('click', () => setMode('pan'));
     
-    setupCanvasControls() {
-        // Pan with middle mouse button or space+drag
-        this.canvasWrapper.addEventListener('mousedown', (e) => {
-            if (e.button === 1 || (e.button === 0 && e.target === this.connectionsSvg)) {
-                this.isPanning = true;
-                this.startPanX = e.clientX - this.panX;
-                this.startPanY = e.clientY - this.panY;
-                e.preventDefault();
-            }
-        });
-        
-        window.addEventListener('mousemove', (e) => {
-            if (this.isPanning) {
-                this.panX = e.clientX - this.startPanX;
-                this.panY = e.clientY - this.startPanY;
-                this.applyTransform();
-            } else if (this.draggedComponent) {
-                const rect = this.canvas.getBoundingClientRect();
-                const x = (e.clientX - rect.left) / this.scale - this.dragOffsetX;
-                const y = (e.clientY - rect.top) / this.scale - this.dragOffsetY;
-                this.moveComponent(this.draggedComponent, x, y);
-            }
-        });
-        
-        window.addEventListener('mouseup', () => {
-            this.isPanning = false;
-            this.draggedComponent = null;
-        });
-        
-        // Mouse wheel zoom
-        this.canvasWrapper.addEventListener('wheel', (e) => {
-            e.preventDefault();
-            const delta = e.deltaY > 0 ? -0.1 : 0.1;
-            this.zoom(delta);
-        });
-    }
-    
-    applyTransform() {
-        this.canvas.style.transform = `translate(${this.panX}px, ${this.panY}px) scale(${this.scale})`;
-        this.connectionsSvg.style.transform = `translate(${this.panX}px, ${this.panY}px) scale(${this.scale})`;
-    }
-    
-    zoom(delta) {
-        this.scale = Math.max(0.5, Math.min(2, this.scale + delta));
-        this.applyTransform();
-    }
-    
-    resetZoom() {
-        this.scale = 1;
-        this.panX = 0;
-        this.panY = 0;
-        this.applyTransform();
-    }
-    
-    updateCanvasSize() {
-        const container = document.querySelector('.canvas-container');
-        if (container) {
-            const width = Math.max(container.clientWidth, 3000);
-            const height = Math.max(container.clientHeight, 2000);
-            this.canvas.style.width = `${width}px`;
-            this.canvas.style.height = `${height}px`;
-            this.connectionsSvg.style.width = `${width}px`;
-            this.connectionsSvg.style.height = `${height}px`;
+    // Template selection
+    templateSelect.addEventListener('change', (e) => {
+        if (e.target.value) {
+            loadTemplate(e.target.value);
+            e.target.value = '';
         }
-    }
+    });
+}
+
+/**
+ * Initialize palette drag and drop
+ */
+function initPaletteDragDrop() {
+    const paletteItems = document.querySelectorAll('.palette-item');
     
-    addComponent(type, x, y) {
-        const id = generateId();
-        const config = getComponentDefaultConfig(type);
-        
-        const component = {
-            id,
-            type,
-            x,
-            y,
-            config
-        };
-        
-        this.components.push(component);
-        this.renderComponent(component);
-        this.selectComponent(id);
-    }
-    
-    renderComponent(component) {
-        const el = document.createElement('div');
-        el.className = 'component';
-        el.dataset.componentId = component.id;
-        el.dataset.type = component.type;
-        el.style.left = `${component.x}px`;
-        el.style.top = `${component.y}px`;
-        
-        const icon = getComponentIcon(component.type);
-        const name = getComponentDisplayName(component.type);
-        const color = COMPONENT_TYPES[component.type]?.color || '#888';
-        
-        el.innerHTML = `
-            <div class="component-header" style="background-color: ${color}">
-                <span class="component-icon">${icon}</span>
-                <span class="component-name">${name}</span>
-            </div>
-            <div class="component-body">
-                <div class="component-id">${component.id.substring(0, 8)}</div>
-            </div>
-            <div class="component-metrics"></div>
-        `;
-        
-        // Component click
-        el.addEventListener('click', (e) => {
-            e.stopPropagation();
-            if (this.isConnecting) {
-                this.handleConnectionClick(component.id);
-            } else {
-                this.selectComponent(component.id);
-            }
+    paletteItems.forEach(item => {
+        item.addEventListener('dragstart', (e) => {
+            e.dataTransfer.setData('component-type', item.dataset.type);
+            e.dataTransfer.effectAllowed = 'copy';
         });
-        
-        // Right-click for context menu
-        el.addEventListener('contextmenu', (e) => {
-            e.preventDefault();
-            this.showContextMenu(e, component.id);
-        });
-        
-        // Drag to move
-        el.addEventListener('mousedown', (e) => {
-            if (e.button === 0 && !this.isConnecting) {
-                this.draggedComponent = component.id;
-                const rect = el.getBoundingClientRect();
-                const canvasRect = this.canvas.getBoundingClientRect();
-                this.dragOffsetX = (e.clientX - rect.left) / this.scale;
-                this.dragOffsetY = (e.clientY - rect.top) / this.scale;
-            }
-        });
-        
-        this.canvas.appendChild(el);
+    });
+    
+    componentsLayer.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'copy';
+    });
+    
+    componentsLayer.addEventListener('drop', handleDrop);
+}
+
+/**
+ * Handle drop event on canvas
+ */
+function handleDrop(e) {
+    e.preventDefault();
+    const type = e.dataTransfer.getData('component-type');
+    
+    if (!type) return;
+    
+    const rect = componentsLayer.getBoundingClientRect();
+    const x = (e.clientX - rect.left - state.panOffset.x) / state.scale;
+    const y = (e.clientY - rect.top - state.panOffset.y) / state.scale;
+    
+    addComponent(type, x, y);
+}
+
+/**
+ * Add component to canvas
+ */
+function addComponent(type, x, y) {
+    const component = createComponent(type, x, y);
+    if (!component) return;
+    
+    state.components[component.id] = component;
+    renderComponent(component);
+    updateConnections();
+    updateMetricsSummary();
+    updateStatus(`Added ${getComponentType(type).name}`);
+    
+    // Auto-select the new component
+    selectComponent(component.id);
+}
+
+/**
+ * Render component on canvas
+ */
+function renderComponent(component) {
+    const element = document.createElement('div');
+    element.className = 'canvas-component';
+    element.id = component.id;
+    element.style.left = `${component.x}px`;
+    element.style.top = `${component.y}px`;
+    
+    const compType = getComponentType(component.type);
+    
+    element.innerHTML = `
+        <div class="health-indicator" id="${component.id}-health"></div>
+        <div class="component-header">
+            <span class="component-icon">${compType.icon}</span>
+            <span>${component.name}</span>
+        </div>
+        <div class="component-metrics">
+            <div><span class="metric-label">QPS:</span> <span class="metric-value" id="${component.id}-qps">0</span></div>
+            <div><span class="metric-label">Latency:</span> <span class="metric-value" id="${component.id}-latency">0ms</span></div>
+            <div><span class="metric-label">Throughput:</span> <span class="metric-value" id="${component.id}-throughput">0</span></div>
+            <div><span class="metric-label">Error:</span> <span class="metric-value" id="${component.id}-error">0%</span></div>
+        </div>
+    `;
+    
+    // Component events
+    element.addEventListener('mousedown', (e) => handleComponentMouseDown(e, component.id));
+    element.addEventListener('dblclick', () => selectComponent(component.id));
+    
+    componentsLayer.appendChild(element);
+}
+
+/**
+ * Handle mouse down on component
+ */
+function handleComponentMouseDown(e, componentId) {
+    e.stopPropagation();
+    
+    if (state.isConnecting) {
+        handleConnectClick(componentId);
+        return;
     }
     
-    moveComponent(id, x, y) {
-        const component = this.components.find(c => c.id === id);
-        if (component) {
-            component.x = x;
-            component.y = y;
-            const el = document.querySelector(`[data-component-id="${id}"]`);
-            if (el) {
-                el.style.left = `${x}px`;
-                el.style.top = `${y}px`;
-                this.drawConnections();
-            }
-        }
+    if (state.panMode) {
+        selectComponent(componentId);
+        return;
     }
     
-    selectComponent(id) {
-        // Deselect previous
-        document.querySelectorAll('.component.selected').forEach(el => {
-            el.classList.remove('selected');
-        });
-        
-        this.selectedComponent = id;
-        const el = document.querySelector(`[data-component-id="${id}"]`);
-        if (el) {
-            el.classList.add('selected');
-        }
-        
-        this.showProperties(id);
+    state.isDragging = true;
+    state.selectedComponent = componentId;
+    
+    const component = state.components[componentId];
+    const rect = e.target.getBoundingClientRect();
+    state.dragOffset = {
+        x: e.clientX - rect.left,
+        y: e.clientY - rect.top
+    };
+    
+    // Bring to front
+    const element = document.getElementById(componentId);
+    element.style.zIndex = '100';
+    
+    selectComponent(componentId);
+}
+
+/**
+ * Handle canvas mouse down
+ */
+function handleCanvasMouseDown(e) {
+    if (e.target !== componentsLayer && e.target !== connectionsLayer && e.target !== particlesLayer) {
+        return;
     }
     
-    showProperties(id) {
-        const component = this.components.find(c => c.id === id);
-        if (!component) return;
-        
-        const config = component.config || {};
-        let fields = '';
-        
-        for (const [key, value] of Object.entries(config)) {
-            const inputType = typeof value === 'number' ? 'number' : 'text';
-            const step = typeof value === 'number' && value % 1 !== 0 ? '0.01' : '1';
-            fields += `
-                <div class="property-field">
-                    <label>${key.replace(/_/g, ' ')}:</label>
-                    <input type="${inputType}" step="${step}" data-key="${key}" value="${value}">
-                </div>
-            `;
-        }
-        
-        this.propertiesContent.innerHTML = `
-            <h4>${getComponentDisplayName(component.type)}</h4>
-            <p class="component-info">ID: ${component.id}</p>
-            <div class="properties-form">
-                ${fields}
-            </div>
-            <button class="btn btn-danger btn-small" onclick="app.deleteComponent('${id}')">Delete</button>
-        `;
-        
-        // Add event listeners to inputs
-        this.propertiesContent.querySelectorAll('input').forEach(input => {
-            input.addEventListener('change', (e) => {
-                const key = e.target.dataset.key;
-                let value = e.target.value;
-                if (e.target.type === 'number') {
-                    value = parseFloat(value);
-                }
-                if (component.config) {
-                    component.config[key] = value;
-                }
-            });
-        });
-    }
-    
-    deleteComponent(id) {
-        // Remove from array
-        this.components = this.components.filter(c => c.id !== id);
-        
-        // Remove connections
-        this.connections = this.connections.filter(c => c.from !== id && c.to !== id);
-        
-        // Remove from DOM
-        const el = document.querySelector(`[data-component-id="${id}"]`);
-        if (el) {
-            el.remove();
-        }
-        
-        this.drawConnections();
-        this.propertiesContent.innerHTML = '<p class="no-selection">Select a component to edit properties</p>';
-    }
-    
-    showContextMenu(e, id) {
-        // For future implementation
-        console.log('Context menu for', id);
-    }
-    
-    // Connection handling
-    startConnectionMode() {
-        this.isConnecting = true;
-        this.connectionStart = null;
-        document.getElementById('connectionMode')?.classList.remove('hidden');
-    }
-    
-    handleConnectionClick(id) {
-        if (!this.connectionStart) {
-            this.connectionStart = id;
-            const el = document.querySelector(`[data-component-id="${id}"]`);
-            if (el) {
-                el.classList.add('connecting');
-            }
-        } else {
-            if (this.connectionStart !== id) {
-                // Check if connection already exists
-                const exists = this.connections.some(
-                    c => (c.from === this.connectionStart && c.to === id) ||
-                         (c.from === id && c.to === this.connectionStart)
-                );
-                
-                if (!exists) {
-                    this.connections.push({
-                        from: this.connectionStart,
-                        to: id
-                    });
-                    this.drawConnections();
-                }
-            }
-            
-            // Reset connection mode
-            document.querySelectorAll('.component.connecting').forEach(el => {
-                el.classList.remove('connecting');
-            });
-            this.cancelConnectionMode();
-        }
-    }
-    
-    cancelConnectionMode() {
-        this.isConnecting = false;
-        this.connectionStart = null;
-        document.querySelectorAll('.component.connecting').forEach(el => {
-            el.classList.remove('connecting');
-        });
-        document.getElementById('connectionMode')?.classList.add('hidden');
-    }
-    
-    drawConnections() {
-        this.simulationEngine.drawConnections(this.connections);
-    }
-    
-    // Simulation control
-    async startSimulation() {
-        if (this.components.length === 0) {
-            alert('Please add components first');
-            return;
-        }
-        
-        try {
-            // Create or update simulation
-            if (!this.simulationId) {
-                const response = await fetch('/api/simulations', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({
-                        name: 'My Simulation',
-                        components: this.components,
-                        connections: this.connections
-                    })
-                });
-                const data = await response.json();
-                this.simulationId = data.id;
-            } else {
-                await fetch(`/api/simulations/${this.simulationId}`, {
-                    method: 'PUT',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({
-                        components: this.components,
-                        connections: this.connections
-                    })
-                });
-            }
-            
-            // Start simulation
-            await fetch(`/api/simulations/${this.simulationId}/start`, {
-                method: 'POST'
-            });
-            
-            // Start engine
-            await this.simulationEngine.start(this.simulationId, this.components, this.connections);
-            
-            this.updateMetricsPanel();
-        } catch (error) {
-            console.error('Error starting simulation:', error);
-            alert('Error starting simulation');
-        }
-    }
-    
-    async stopSimulation() {
-        if (this.simulationId) {
-            await fetch(`/api/simulations/${this.simulationId}/stop`, {
-                method: 'POST'
-            });
-        }
-        
-        this.simulationEngine.stop();
-        this.metricsContent.innerHTML = '<p class="no-metrics">Simulation stopped</p>';
-    }
-    
-    updateMetricsPanel() {
-        // Metrics are updated by the simulation engine
-    }
-    
-    // Template loading
-    loadTemplates() {
-        if (window.loadTemplates) {
-            window.loadTemplates();
-        }
-    }
-    
-    loadTemplate(template) {
-        this.clearCanvas();
-        
-        // Add components
-        template.components.forEach(comp => {
-            this.components.push({
-                id: comp.id,
-                type: comp.type,
-                x: comp.x,
-                y: comp.y,
-                config: comp.config || getComponentDefaultConfig(comp.type)
-            });
-            this.renderComponent(this.components[this.components.length - 1]);
-        });
-        
-        // Add connections
-        this.connections = template.connections || [];
-        this.drawConnections();
-    }
-    
-    clearCanvas() {
-        this.stopSimulation();
-        this.components = [];
-        this.connections = [];
-        this.canvas.innerHTML = '';
-        this.connectionsSvg.innerHTML = '';
-        this.propertiesContent.innerHTML = '<p class="no-selection">Select a component to edit properties</p>';
-        this.metricsContent.innerHTML = '<p class="no-metrics">Start simulation to see metrics</p>';
-        this.simulationId = null;
-    }
-    
-    // Save/Load/Export
-    newSimulation() {
-        if (confirm('Clear current simulation?')) {
-            this.clearCanvas();
-        }
-    }
-    
-    saveSimulation() {
-        const data = {
-            components: this.components,
-            connections: this.connections
-        };
-        localStorage.setItem('systemDesignSim', JSON.stringify(data));
-        alert('Simulation saved locally');
-    }
-    
-    loadSimulationDialog() {
-        const saved = localStorage.getItem('systemDesignSim');
-        if (saved) {
-            const data = JSON.parse(saved);
-            this.clearCanvas();
-            this.components = data.components || [];
-            this.connections = data.connections || [];
-            
-            this.components.forEach(comp => this.renderComponent(comp));
-            this.drawConnections();
-        } else {
-            alert('No saved simulation found');
-        }
-    }
-    
-    exportSimulation() {
-        const data = {
-            components: this.components,
-            connections: this.connections,
-            exportedAt: new Date().toISOString()
-        };
-        const blob = new Blob([JSON.stringify(data, null, 2)], {type: 'application/json'});
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `system-design-${Date.now()}.json`;
-        a.click();
-        URL.revokeObjectURL(url);
+    if (state.panMode || e.button === 1) {
+        state.isPanning = true;
+        state.panStart = { x: e.clientX - state.panOffset.x, y: e.clientY - state.panOffset.y };
+        canvasWrapper.style.cursor = 'grabbing';
+    } else {
+        deselectComponent();
     }
 }
 
-// Initialize app when DOM is ready
-let app;
-document.addEventListener('DOMContentLoaded', () => {
-    app = new SystemDesignApp();
-    window.app = app;
-});
+/**
+ * Handle canvas mouse move
+ */
+function handleCanvasMouseMove(e) {
+    if (state.isDragging && state.selectedComponent) {
+        const component = state.components[state.selectedComponent];
+        const rect = componentsLayer.getBoundingClientRect();
+        
+        component.x = (e.clientX - rect.left - state.dragOffset.x - state.panOffset.x) / state.scale;
+        component.y = (e.clientY - rect.top - state.dragOffset.y - state.panOffset.y) / state.scale;
+        
+        const element = document.getElementById(state.selectedComponent);
+        element.style.left = `${component.x}px`;
+        element.style.top = `${component.y}px`;
+        
+        updateConnections();
+    }
+    
+    if (state.isPanning) {
+        state.panOffset.x = e.clientX - state.panStart.x;
+        state.panOffset.y = e.clientY - state.panStart.y;
+        updateTransform();
+    }
+}
+
+/**
+ * Handle canvas mouse up
+ */
+function handleCanvasMouseUp(e) {
+    if (state.isDragging && state.selectedComponent) {
+        const element = document.getElementById(state.selectedComponent);
+        element.style.zIndex = '10';
+    }
+    
+    state.isDragging = false;
+    state.isPanning = false;
+    canvasWrapper.style.cursor = 'default';
+    
+    saveState();
+}
+
+/**
+ * Handle wheel event for zoom
+ */
+function handleWheel(e) {
+    e.preventDefault();
+    
+    const delta = e.deltaY > 0 ? 0.9 : 1.1;
+    const newScale = Math.max(0.2, Math.min(3, state.scale * delta));
+    
+    // Zoom towards mouse position
+    const rect = canvasWrapper.getBoundingClientRect();
+    const mouseX = e.clientX - rect.left;
+    const mouseY = e.clientY - rect.top;
+    
+    state.panOffset.x = mouseX - (mouseX - state.panOffset.x) * (newScale / state.scale);
+    state.panOffset.y = mouseY - (mouseY - state.panOffset.y) * (newScale / state.scale);
+    state.scale = newScale;
+    
+    updateTransform();
+}
+
+/**
+ * Update canvas transform
+ */
+function updateTransform() {
+    canvasWrapper.style.transform = `translate(${state.panOffset.x}px, ${state.panOffset.y}px) scale(${state.scale})`;
+}
+
+/**
+ * Set interaction mode
+ */
+function setMode(mode) {
+    state.panMode = mode === 'pan';
+    state.isConnecting = mode === 'connect';
+    
+    document.getElementById('btn-pan').classList.toggle('active', state.panMode);
+    document.getElementById('btn-connect').classList.toggle('active', state.isConnecting);
+    
+    if (state.isConnecting) {
+        updateStatus('Connect Mode: Click source component, then click target component');
+    } else {
+        updateStatus('Pan Mode: Click and drag to pan, scroll to zoom');
+    }
+}
+
+/**
+ * Handle connect mode click
+ */
+function handleConnectClick(componentId) {
+    if (!state.connectSource) {
+        state.connectSource = componentId;
+        const element = document.getElementById(componentId);
+        element.classList.add('connecting');
+        updateStatus('Select target component to connect');
+    } else {
+        if (state.connectSource !== componentId) {
+            addConnection(state.connectSource, componentId);
+        }
+        
+        // Reset
+        const sourceElement = document.getElementById(state.connectSource);
+        if (sourceElement) {
+            sourceElement.classList.remove('connecting');
+        }
+        state.connectSource = null;
+        updateStatus('Connect Mode: Click source component to start connection');
+    }
+}
+
+/**
+ * Add connection between components
+ */
+function addConnection(fromId, toId) {
+    // Check if connection already exists
+    const exists = state.connections.some(
+        c => c.from === fromId && c.to === toId
+    );
+    
+    if (exists) {
+        updateStatus('Connection already exists');
+        return;
+    }
+    
+    state.connections.push({ from: fromId, to: toId });
+    updateConnections();
+    updateMetricsSummary();
+    updateStatus(`Connected ${state.components[fromId].name} → ${state.components[toId].name}`);
+    saveState();
+}
+
+/**
+ * Update connection lines
+ */
+function updateConnections() {
+    connectionsLayer.innerHTML = '';
+    
+    for (const conn of state.connections) {
+        const fromComp = state.components[conn.from];
+        const toComp = state.components[conn.to];
+        
+        if (!fromComp || !toComp) continue;
+        
+        const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        
+        const startX = fromComp.x + 70;
+        const startY = fromComp.y + 40;
+        const endX = toComp.x + 70;
+        const endY = toComp.y + 40;
+        
+        // Create curved path
+        const controlX1 = startX + (endX - startX) / 2;
+        const controlY1 = startY;
+        const controlX2 = startX + (endX - startX) / 2;
+        const controlY2 = endY;
+        
+        const d = `M ${startX} ${startY} C ${controlX1} ${controlY1}, ${controlX2} ${controlY2}, ${endX} ${endY}`;
+        
+        path.setAttribute('d', d);
+        path.setAttribute('class', 'connection-line');
+        
+        // Click to remove connection
+        path.addEventListener('click', () => {
+            if (confirm('Remove this connection?')) {
+                state.connections = state.connections.filter(
+                    c => !(c.from === conn.from && c.to === conn.to)
+                );
+                updateConnections();
+                updateMetricsSummary();
+                saveState();
+            }
+        });
+        
+        connectionsLayer.appendChild(path);
+    }
+}
+
+/**
+ * Select component
+ */
+function selectComponent(componentId) {
+    deselectComponent();
+    
+    state.selectedComponent = componentId;
+    const element = document.getElementById(componentId);
+    if (element) {
+        element.classList.add('selected');
+    }
+    
+    showProperties(componentId);
+}
+
+/**
+ * Deselect component
+ */
+function deselectComponent() {
+    if (state.selectedComponent) {
+        const element = document.getElementById(state.selectedComponent);
+        if (element) {
+            element.classList.remove('selected');
+        }
+    }
+    state.selectedComponent = null;
+    propertiesContent.innerHTML = '<p class="empty-state">Select a component to edit properties</p>';
+}
+
+/**
+ * Show properties panel for component
+ */
+function showProperties(componentId) {
+    const component = state.components[componentId];
+    if (!component) return;
+    
+    const compType = getComponentType(component.type);
+    
+    let configHtml = '';
+    for (const [key, value] of Object.entries(component.config)) {
+        const inputType = typeof value === 'boolean' ? 'checkbox' : 
+                         typeof value === 'number' ? 'number' : 'text';
+        
+        configHtml += `
+            <div class="property-group">
+                <label>${key.charAt(0).toUpperCase() + key.slice(1)}</label>
+                <input type="${inputType}" 
+                       data-key="${key}" 
+                       value="${value}"
+                       ${inputType === 'checkbox' && value ? 'checked' : ''}>
+            </div>
+        `;
+    }
+    
+    propertiesContent.innerHTML = `
+        <div class="property-group">
+            <label>Name</label>
+            <input type="text" id="prop-name" value="${component.name}">
+        </div>
+        <div class="property-group">
+            <label>Type</label>
+            <input type="text" value="${compType.name}" disabled>
+        </div>
+        <h4 style="margin: 16px 0 8px; color: var(--text-secondary);">Configuration</h4>
+        ${configHtml}
+        <button class="btn btn-danger" onclick="deleteComponent('${componentId}')" style="width: 100%; margin-top: 16px;">
+            🗑 Delete Component
+        </button>
+    `;
+    
+    // Add event listeners to inputs
+    const nameInput = document.getElementById('prop-name');
+    nameInput.addEventListener('change', (e) => {
+        component.name = e.target.value;
+        const element = document.getElementById(componentId);
+        element.querySelector('.component-header span:last-child').textContent = component.name;
+        saveState();
+    });
+    
+    const configInputs = propertiesContent.querySelectorAll('[data-key]');
+    configInputs.forEach(input => {
+        input.addEventListener('change', (e) => {
+            const key = e.target.dataset.key;
+            const value = e.target.type === 'checkbox' ? e.target.checked : 
+                         typeof component.config[key] === 'number' ? parseFloat(e.target.value) : e.target.value;
+            
+            component.config[key] = value;
+            simulationEngine.update(state.components, state.connections);
+            saveState();
+        });
+    });
+}
+
+/**
+ * Delete component
+ */
+function deleteComponent(componentId) {
+    if (!confirm('Delete this component and all its connections?')) return;
+    
+    // Remove component
+    delete state.components[componentId];
+    
+    // Remove associated connections
+    state.connections = state.connections.filter(
+        c => c.from !== componentId && c.to !== componentId
+    );
+    
+    // Remove from DOM
+    const element = document.getElementById(componentId);
+    if (element) {
+        element.remove();
+    }
+    
+    deselectComponent();
+    updateConnections();
+    updateMetricsSummary();
+    saveState();
+}
+
+/**
+ * Start simulation
+ */
+function startSimulation() {
+    if (Object.keys(state.components).length === 0) {
+        updateStatus('Add components first');
+        return;
+    }
+    
+    simulationEngine.start(state.components, state.connections);
+    updateStatus('Simulation running');
+    document.getElementById('btn-start').disabled = true;
+    document.getElementById('btn-stop').disabled = false;
+}
+
+/**
+ * Stop simulation
+ */
+function stopSimulation() {
+    simulationEngine.stop();
+    updateStatus('Simulation stopped');
+    document.getElementById('btn-start').disabled = false;
+    document.getElementById('btn-stop').disabled = true;
+    
+    // Clear metrics display
+    for (const compId in state.components) {
+        updateComponentMetrics(compId, { qps: 0, latency: 0, throughput: 0, errorRate: 0, health: 'healthy' });
+    }
+}
+
+/**
+ * Refresh metrics from simulation engine
+ */
+function refreshMetrics() {
+    if (!simulationEngine.running) return;
+    
+    const metrics = simulationEngine.getMetrics();
+    
+    for (const compId in metrics) {
+        updateComponentMetrics(compId, metrics[compId]);
+    }
+}
+
+/**
+ * Update component metrics display
+ */
+function updateComponentMetrics(componentId, metrics) {
+    const qpsEl = document.getElementById(`${componentId}-qps`);
+    const latencyEl = document.getElementById(`${componentId}-latency`);
+    const throughputEl = document.getElementById(`${componentId}-throughput`);
+    const errorEl = document.getElementById(`${componentId}-error`);
+    const healthEl = document.getElementById(`${componentId}-health`);
+    
+    if (qpsEl) qpsEl.textContent = Math.round(metrics.qps);
+    if (latencyEl) latencyEl.textContent = Math.round(metrics.latency) + 'ms';
+    if (throughputEl) throughputEl.textContent = Math.round(metrics.throughput);
+    if (errorEl) errorEl.textContent = metrics.errorRate.toFixed(1) + '%';
+    
+    if (healthEl) {
+        healthEl.className = 'health-indicator';
+        if (metrics.health === 'degraded') {
+            healthEl.classList.add('degraded');
+        } else if (metrics.health === 'unhealthy') {
+            healthEl.classList.add('unhealthy');
+        }
+    }
+}
+
+/**
+ * Load template
+ */
+function loadTemplate(templateId) {
+    const template = getTemplate(templateId);
+    if (!template) return;
+    
+    clearCanvas();
+    
+    // Add components
+    for (const compData of template.components) {
+        const component = createComponent(compData.type, compData.x, compData.y);
+        component.id = compData.id;
+        component.name = compData.id;
+        component.config = { ...component.config, ...compData.config };
+        state.components[compData.id] = component;
+        renderComponent(component);
+    }
+    
+    // Add connections
+    state.connections = [...template.connections];
+    updateConnections();
+    
+    updateMetricsSummary();
+    updateStatus(`Loaded template: ${template.name}`);
+    saveState();
+}
+
+/**
+ * Populate template dropdown
+ */
+function populateTemplates() {
+    const templates = getAllTemplates();
+    
+    for (const template of templates) {
+        const option = document.createElement('option');
+        option.value = template.id;
+        option.textContent = template.name;
+        templateSelect.appendChild(option);
+    }
+}
+
+/**
+ * Clear canvas
+ */
+function clearCanvas() {
+    stopSimulation();
+    
+    state.components = {};
+    state.connections = [];
+    componentsLayer.innerHTML = '';
+    connectionsLayer.innerHTML = '';
+    
+    deselectComponent();
+    updateMetricsSummary();
+    updateStatus('Canvas cleared');
+}
+
+/**
+ * Export configuration
+ */
+function exportConfig() {
+    const config = {
+        components: state.components,
+        connections: state.connections
+    };
+    
+    const blob = new Blob([JSON.stringify(config, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'system-design-config.json';
+    a.click();
+    
+    URL.revokeObjectURL(url);
+    updateStatus('Configuration exported');
+}
+
+/**
+ * Save state to localStorage
+ */
+function saveState() {
+    const config = {
+        components: state.components,
+        connections: state.connections
+    };
+    localStorage.setItem('systemDesignLab', JSON.stringify(config));
+}
+
+/**
+ * Load saved state
+ */
+function loadSavedState() {
+    const saved = localStorage.getItem('systemDesignLab');
+    if (!saved) return;
+    
+    try {
+        const config = JSON.parse(saved);
+        
+        clearCanvas();
+        
+        for (const [id, compData] of Object.entries(config.components)) {
+            const component = createComponent(compData.type, compData.x, compData.y);
+            component.id = id;
+            component.name = compData.name;
+            component.config = compData.config;
+            state.components[id] = component;
+            renderComponent(component);
+        }
+        
+        state.connections = config.connections || [];
+        updateConnections();
+        updateMetricsSummary();
+        updateStatus('Loaded saved configuration');
+    } catch (e) {
+        console.error('Failed to load saved state:', e);
+    }
+}
+
+/**
+ * Update metrics summary
+ */
+function updateMetricsSummary() {
+    const compCount = Object.keys(state.components).length;
+    const connCount = state.connections.length;
+    metricsSummary.textContent = `Components: ${compCount} | Connections: ${connCount}`;
+}
+
+/**
+ * Update status bar
+ */
+function updateStatus(message) {
+    statusText.textContent = message;
+}
+
+// Try to load saved state on startup
+setTimeout(loadSavedState, 100);

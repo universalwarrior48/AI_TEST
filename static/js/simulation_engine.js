@@ -1,221 +1,254 @@
-// Simulation Engine - Handles metrics calculation and data flow animation
+/**
+ * Simulation Engine
+ * Handles metrics calculation, data flow animation, and simulation state
+ */
 
 class SimulationEngine {
     constructor() {
-        this.simulationId = null;
-        this.isRunning = false;
-        this.metricsInterval = null;
-        this.animationFrame = null;
-        this.particles = [];
+        this.running = false;
+        this.components = {};
         this.connections = [];
+        this.metrics = {};
+        this.particles = [];
+        this.lastUpdate = 0;
+        this.animationFrame = null;
     }
 
-    async start(simulationId, components, connections) {
-        this.simulationId = simulationId;
-        this.isRunning = true;
+    /**
+     * Start simulation
+     */
+    start(components, connections) {
+        this.components = components;
         this.connections = connections;
-        
-        // Start metrics polling
-        this.metricsInterval = setInterval(() => {
-            this.fetchMetrics();
-        }, 500);
-
-        // Start animation
+        this.running = true;
+        this.lastUpdate = Date.now();
         this.animate();
-        
-        return true;
     }
 
+    /**
+     * Stop simulation
+     */
     stop() {
-        this.isRunning = false;
-        
-        if (this.metricsInterval) {
-            clearInterval(this.metricsInterval);
-            this.metricsInterval = null;
-        }
-        
+        this.running = false;
         if (this.animationFrame) {
             cancelAnimationFrame(this.animationFrame);
             this.animationFrame = null;
         }
-        
         this.clearParticles();
     }
 
-    async fetchMetrics() {
-        if (!this.simulationId || !this.isRunning) return;
-        
-        try {
-            const response = await fetch(`/api/simulations/${this.simulationId}/metrics`);
-            const metrics = await response.json();
+    /**
+     * Update simulation state
+     */
+    update(components, connections) {
+        this.components = components;
+        this.connections = connections;
+        if (this.running) {
+            this.calculateMetrics();
+        }
+    }
+
+    /**
+     * Calculate metrics for all components
+     */
+    calculateMetrics() {
+        const now = Date.now();
+        const delta = (now - this.lastUpdate) / 1000;
+        this.lastUpdate = now;
+
+        // Initialize metrics
+        this.metrics = {};
+        for (const compId in this.components) {
+            const comp = this.components[compId];
+            this.metrics[compId] = {
+                qps: 0,
+                latency: comp.config.latency || 10,
+                throughput: 0,
+                errorRate: 0,
+                health: 'healthy',
+                connections: 0
+            };
+        }
+
+        // Simulate traffic flow from clients
+        for (const compId in this.components) {
+            const comp = this.components[compId];
             
-            if (metrics.components) {
-                this.updateComponentMetrics(metrics.components);
-            }
-        } catch (error) {
-            console.error('Error fetching metrics:', error);
-        }
-    }
-
-    updateComponentMetrics(componentsMetrics) {
-        for (const [compId, metrics] of Object.entries(componentsMetrics)) {
-            const componentEl = document.querySelector(`[data-component-id="${compId}"]`);
-            if (componentEl) {
-                this.updateComponentDisplay(componentEl, metrics);
+            if (comp.type === 'client') {
+                // Client generates load
+                const baseQps = comp.config.qps || 100;
+                this.metrics[compId].qps = baseQps;
+                this.metrics[compId].throughput = baseQps * (1 - (comp.config.failureRate || 0));
+                
+                // Propagate to connected components
+                this.propagateLoad(compId, baseQps);
             }
         }
+
+        return this.metrics;
     }
 
-    updateComponentDisplay(componentEl, metrics) {
-        let metricsEl = componentEl.querySelector('.component-metrics');
+    /**
+     * Propagate load through connections
+     */
+    propagateLoad(fromId, incomingQps) {
+        const outgoingConnections = this.connections.filter(c => c.from === fromId);
         
-        if (!metricsEl) {
-            metricsEl = document.createElement('div');
-            metricsEl.className = 'component-metrics';
-            componentEl.appendChild(metricsEl);
+        if (outgoingConnections.length === 0) return;
+
+        const qpsPerConnection = incomingQps / outgoingConnections.length;
+
+        for (const conn of outgoingConnections) {
+            const targetId = conn.to;
+            if (!this.components[targetId] || !this.metrics[targetId]) continue;
+
+            const targetComp = this.components[targetId];
+            const capacity = targetComp.config.qps || 1000;
+            const failureRate = targetComp.config.failureRate || 0;
+            const latency = targetComp.config.latency || 10;
+
+            // Calculate actual QPS considering capacity
+            const actualQps = Math.min(qpsPerConnection, capacity);
+            const errorRate = qpsPerConnection > capacity ? 
+                failureRate + 0.1 : failureRate * 0.5;
+            
+            // Update metrics
+            this.metrics[targetId].qps += Math.round(actualQps);
+            this.metrics[targetId].throughput += Math.round(actualQps * (1 - errorRate));
+            this.metrics[targetId].errorRate = Math.max(
+                this.metrics[targetId].errorRate, 
+                Math.round(errorRate * 100 * 100) / 100
+            );
+            this.metrics[targetId].latency = latency * (1 + errorRate);
+            
+            // Determine health status
+            if (errorRate > 0.1 || qpsPerConnection > capacity) {
+                this.metrics[targetId].health = 'unhealthy';
+            } else if (errorRate > 0.05) {
+                this.metrics[targetId].health = 'degraded';
+            }
+
+            // Continue propagating
+            this.propagateLoad(targetId, actualQps);
         }
-
-        const healthClass = metrics.health === 'healthy' ? '' : 
-                           metrics.health === 'degraded' ? 'degraded' : 'error';
-        
-        metricsEl.innerHTML = `
-            <div class="metric-item">
-                <span>QPS:</span>
-                <span class="metric-value">${metrics.qps.toLocaleString()}</span>
-            </div>
-            <div class="metric-item">
-                <span>Latency:</span>
-                <span class="metric-value">${metrics.latency_ms.toFixed(1)}ms</span>
-            </div>
-            <div class="metric-item">
-                <span>Throughput:</span>
-                <span class="metric-value">${metrics.throughput_mbps.toFixed(1)} Mb/s</span>
-            </div>
-            <div class="metric-item">
-                <span>Errors:</span>
-                <span class="metric-value">${(metrics.error_rate * 100).toFixed(2)}%</span>
-            </div>
-            <div class="metric-item" style="grid-column: span 2;">
-                <span>Health:</span>
-                <div class="health-indicator ${healthClass}"></div>
-            </div>
-        `;
     }
 
+    /**
+     * Animation loop for particles
+     */
     animate() {
-        if (!this.isRunning) return;
+        if (!this.running) return;
 
-        // Create new particles for active connections
-        if (Math.random() < 0.1) {
-            this.createParticle();
-        }
-
-        // Update particle positions
         this.updateParticles();
-
-        // Render particles
         this.renderParticles();
 
         this.animationFrame = requestAnimationFrame(() => this.animate());
     }
 
-    createParticle() {
-        if (this.connections.length === 0) return;
-        
-        const connection = this.connections[Math.floor(Math.random() * this.connections.length)];
-        const fromComp = document.querySelector(`[data-component-id="${connection.from}"]`);
-        const toComp = document.querySelector(`[data-component-id="${connection.to}"]`);
-        
-        if (fromComp && toComp) {
-            const fromRect = fromComp.getBoundingClientRect();
-            const toRect = toComp.getBoundingClientRect();
-            const canvasRect = document.getElementById('canvas').getBoundingClientRect();
-            
-            this.particles.push({
-                from: connection.from,
-                to: connection.to,
-                progress: 0,
-                speed: 0.02 + Math.random() * 0.02,
-                startX: fromRect.left - canvasRect.left + fromRect.width / 2,
-                startY: fromRect.top - canvasRect.top + fromRect.height / 2,
-                endX: toRect.left - canvasRect.left + toRect.width / 2,
-                endY: toRect.top - canvasRect.top + toRect.height / 2
-            });
+    /**
+     * Update particle positions
+     */
+    updateParticles() {
+        // Spawn new particles from clients
+        for (const compId in this.components) {
+            const comp = this.components[compId];
+            if (comp.type === 'client' && this.metrics[compId]?.qps > 0) {
+                // Spawn particles based on QPS
+                const spawnRate = Math.min(this.metrics[compId].qps / 100, 10);
+                if (Math.random() < spawnRate * 0.1) {
+                    this.spawnParticle(compId);
+                }
+            }
+        }
+
+        // Update existing particles
+        for (let i = this.particles.length - 1; i >= 0; i--) {
+            const particle = this.particles[i];
+            particle.progress += particle.speed;
+
+            if (particle.progress >= 1) {
+                // Particle reached destination
+                this.particles.splice(i, 1);
+            }
         }
     }
 
-    updateParticles() {
-        this.particles.forEach(particle => {
-            particle.progress += particle.speed;
-            if (particle.progress >= 1) {
-                particle.progress = 0;
-            }
-        });
+    /**
+     * Spawn a new particle
+     */
+    spawnParticle(fromId) {
+        const outgoingConnections = this.connections.filter(c => c.from === fromId);
+        if (outgoingConnections.length === 0) return;
 
-        // Remove old particles
-        this.particles = this.particles.filter(p => p.progress < 1);
+        const conn = outgoingConnections[Math.floor(Math.random() * outgoingConnections.length)];
+        
+        const fromComp = this.components[fromId];
+        const toComp = this.components[conn.to];
+
+        if (!fromComp || !toComp) return;
+
+        this.particles.push({
+            connection: conn,
+            from: fromComp,
+            to: toComp,
+            progress: 0,
+            speed: 0.02 + Math.random() * 0.02
+        });
     }
 
+    /**
+     * Render particles to DOM
+     */
     renderParticles() {
-        const svg = document.getElementById('connectionsSvg');
-        if (!svg) return;
+        const layer = document.getElementById('particles-layer');
+        if (!layer) return;
 
         // Clear existing particles
-        svg.querySelectorAll('.data-particle').forEach(el => el.remove());
+        layer.innerHTML = '';
 
-        // Add new particles
-        this.particles.forEach(particle => {
-            const x = particle.startX + (particle.endX - particle.startX) * particle.progress;
-            const y = particle.startY + (particle.endY - particle.startY) * particle.progress;
+        // Render each particle
+        for (const particle of this.particles) {
+            const element = document.createElement('div');
+            element.className = 'particle';
             
-            const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-            circle.setAttribute('cx', x);
-            circle.setAttribute('cy', y);
-            circle.setAttribute('r', 4);
-            circle.setAttribute('class', 'data-particle');
-            
-            svg.appendChild(circle);
-        });
-    }
+            const startX = particle.from.x + 70;
+            const startY = particle.from.y + 40;
+            const endX = particle.to.x + 70;
+            const endY = particle.to.y + 40;
 
-    clearParticles() {
-        this.particles = [];
-        const svg = document.getElementById('connectionsSvg');
-        if (svg) {
-            svg.querySelectorAll('.data-particle').forEach(el => el.remove());
+            const currentX = startX + (endX - startX) * particle.progress;
+            const currentY = startY + (endY - startY) * particle.progress;
+
+            element.style.left = `${currentX}px`;
+            element.style.top = `${currentY}px`;
+
+            layer.appendChild(element);
         }
     }
 
-    drawConnections(connections) {
-        const svg = document.getElementById('connectionsSvg');
-        if (!svg) return;
+    /**
+     * Clear all particles
+     */
+    clearParticles() {
+        this.particles = [];
+        const layer = document.getElementById('particles-layer');
+        if (layer) {
+            layer.innerHTML = '';
+        }
+    }
 
-        // Clear existing connections
-        svg.querySelectorAll('.connection-line').forEach(el => el.remove());
-
-        connections.forEach(conn => {
-            const fromComp = document.querySelector(`[data-component-id="${conn.from}"]`);
-            const toComp = document.querySelector(`[data-component-id="${conn.to}"]`);
-            
-            if (fromComp && toComp) {
-                const fromRect = fromComp.getBoundingClientRect();
-                const toRect = toComp.getBoundingClientRect();
-                const canvasRect = document.getElementById('canvas').getBoundingClientRect();
-                
-                const x1 = fromRect.left - canvasRect.left + fromRect.width / 2;
-                const y1 = fromRect.top - canvasRect.top + fromRect.height / 2;
-                const x2 = toRect.left - canvasRect.left + toRect.width / 2;
-                const y2 = toRect.top - canvasRect.top + toRect.height / 2;
-                
-                const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-                path.setAttribute('d', `M ${x1} ${y1} L ${x2} ${y2}`);
-                path.setAttribute('class', 'connection-line');
-                
-                svg.appendChild(path);
-            }
-        });
+    /**
+     * Get current metrics
+     */
+    getMetrics() {
+        return this.metrics;
     }
 }
 
-// Export for use in app.js
-window.SimulationEngine = SimulationEngine;
+// Create global instance
+const simulationEngine = new SimulationEngine();
+
+// Export for use in other modules
+if (typeof module !== 'undefined' && module.exports) {
+    module.exports = SimulationEngine;
+}

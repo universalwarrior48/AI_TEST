@@ -1,48 +1,51 @@
-# System Design Lab
+# System Design Lab 🏗️
 
-A visual drag-and-drop system design simulator that helps you learn system design by actually building and testing distributed systems.
+An interactive visual drag-and-drop system design simulator for learning distributed system architectures.
 
-## 🚀 Features
+## Features
 
-- **Visual Drag-and-Drop Interface**: Build systems by dragging components onto a canvas
-- **Real-time Metrics**: Monitor QPS, latency, throughput, and error rates
-- **Animated Data Flow**: Watch data particles flow through your system
-- **10 Example Templates**: From simple client-server to complex systems like Twitter, YouTube, WhatsApp, Netflix, and Google Docs
-- **Configurable Components**: Fine-tune each component's parameters
-- **Dark Theme**: Easy on the eyes for long design sessions
-- **Auto-resizable Canvas**: Pan and zoom to work with large systems
-- **Save/Load/Export**: Persist your designs locally or export as JSON
+✅ **Drag & Drop Interface** - Easily add components from palette to canvas  
+✅ **Dynamic Connections** - Connect components to define traffic flow  
+✅ **Real-time Metrics** - Monitor QPS, latency, throughput, and error rates  
+✅ **Animated Data Flow** - Visualize request flow with particle animations  
+✅ **Auto-resizable Canvas** - Pan and zoom with mouse controls  
+✅ **Dark Theme** - Complete dark mode UI  
+✅ **10+ Templates** - From simple client-server to complex systems (Twitter, Netflix, WhatsApp, etc.)  
+✅ **Component Configuration** - Fine-tune each component's parameters  
+✅ **Start/Stop Simulation** - Control simulation execution  
+✅ **Export Configurations** - Save and load your designs  
 
-## 📋 Components Available
+## Components Available
 
-- 🖥️ **Client** - End users accessing your system
+- 🖥️ **Client** - End users or external services
 - ⚖️ **Load Balancer** - Distributes traffic across servers
 - 🖧 **Server** - Application servers processing requests
-- 🗄️ **Database** - Data storage (SQL, NoSQL, etc.)
-- ⚡ **Cache** - In-memory caching layer (Redis, Memcached)
+- 🗄️ **Database** - Data storage systems
+- ⚡ **Cache** - Fast caching layer (Redis/Memcached)
 - 🚪 **API Gateway** - Entry point for API requests
-- 📨 **Message Queue** - Async messaging (Kafka, RabbitMQ)
-- 🌐 **CDN** - Content Delivery Network
+- 📬 **Message Queue** - Async message processing (Kafka/RabbitMQ)
+- 🌐 **CDN** - Content delivery network
 
-## 🏗️ Example Templates
+## Templates Included
 
-1. **Client-Server** (⭐) - Basic architecture
-2. **Load Balancer + 2 Servers** (⭐⭐) - Horizontal scaling
-3. **Cache Layer** (⭐⭐⭐) - Performance optimization
-4. **Database Sharding** (⭐⭐⭐⭐) - Horizontal DB scaling
-5. **Microservices** (⭐⭐⭐⭐⭐) - Service-oriented architecture
-6. **Twitter-like System** (⭐⭐⭐⭐⭐⭐⭐) - Social media platform
-7. **YouTube-like System** (⭐⭐⭐⭐⭐⭐⭐⭐) - Video streaming
-8. **WhatsApp-like System** (⭐⭐⭐⭐⭐⭐⭐⭐) - Real-time messaging
-9. **Netflix-like System** (⭐⭐⭐⭐⭐⭐⭐⭐⭐) - Streaming with recommendations
-10. **Google Docs-like System** (⭐⭐⭐⭐⭐⭐⭐⭐⭐) - Real-time collaboration
+1. Client-Server (Basic)
+2. Load Balancer + 2 Servers
+3. Cache Layer
+4. Database Sharding
+5. API Gateway Pattern
+6. Message Queue Async
+7. Twitter-like System
+8. YouTube Streaming
+9. WhatsApp Messaging
+10. Netflix Architecture
+11. Google Docs Collaboration
 
-## 🛠️ Installation
+## Installation
 
 ```bash
 # Clone the repository
 git clone <your-repo-url>
-cd system-design-lab
+cd <repo-directory>
 
 # Install dependencies
 pip install flask
@@ -51,93 +54,55 @@ pip install flask
 python app.py
 ```
 
-## 🎮 Usage
+## Usage
 
-1. **Open your browser** and navigate to `http://localhost:5000`
+1. Open browser to `http://localhost:5000`
+2. **Add Components**: Drag from left palette to canvas
+3. **Connect**: Click "Connect Mode", then click source → target
+4. **Configure**: Select a component to edit properties in right panel
+5. **Simulate**: Click "Start" to run simulation with live metrics
+6. **Pan/Zoom**: Use pan mode or scroll to navigate canvas
+7. **Load Template**: Select from dropdown to load pre-built architectures
 
-2. **Add Components**:
-   - Drag components from the left sidebar onto the canvas
-   - Or click on a template to load a pre-built system
-
-3. **Connect Components**:
-   - Double-click a component to enter connection mode
-   - Click on another component to connect them
-   - Or use the connection indicator at the top
-
-4. **Configure Components**:
-   - Click on any component to see its properties
-   - Adjust parameters like QPS capacity, latency, connections, etc.
-
-5. **Run Simulation**:
-   - Click the "Start" button to begin simulation
-   - Watch animated data particles flow through your system
-   - Monitor real-time metrics for each component
-
-6. **Analyze & Optimize**:
-   - Identify bottlenecks (red/yellow health indicators)
-   - Adjust component configurations
-   - Add more servers, caches, or load balancers
-   - Re-run simulation to see improvements
-
-7. **Save/Export**:
-   - Save your design to browser local storage
-   - Export as JSON for sharing or version control
-
-## 🎯 Learning Objectives
-
-- Understand how different components interact in a distributed system
-- Learn about load balancing strategies
-- See the impact of caching on performance
-- Understand database sharding and replication
-- Explore microservices architecture patterns
-- Identify single points of failure
-- Practice capacity planning and scaling
-
-## 📁 Project Structure
+## Project Structure
 
 ```
-system-design-lab/
+/workspace
 ├── app.py                      # Flask backend
 ├── templates/
-│   └── index.html              # Main HTML template
+│   └── index.html             # Main HTML template
 ├── static/
 │   ├── css/
-│   │   └── styles.css          # Dark theme styles
+│   │   └── styles.css         # Dark theme styles
 │   └── js/
-│       ├── app.js              # Main application logic
-│       ├── component_types.js  # Component definitions
-│       ├── simulation_engine.js # Metrics & animations
-│       └── templates.js        # Example templates
-└── README.md                   # This file
+│       ├── app.js             # Main application logic
+│       ├── component_types.js # Component definitions
+│       ├── templates.js       # System templates
+│       └── simulation_engine.js # Metrics & animation engine
+└── README.md                  # This file
 ```
 
-## 🔧 Configuration
+## Learning Objectives
 
-Each component type has configurable parameters:
+- Understand system design patterns
+- Learn about load balancing strategies
+- Explore caching mechanisms
+- Practice database sharding concepts
+- Study microservices architectures
+- Analyze real-world system designs (Twitter, Netflix, etc.)
+- Identify bottlenecks and optimize performance
 
-- **Client**: requests_per_sec, timeout_ms
-- **Load Balancer**: algorithm, qps_capacity, latency_ms, max_connections
-- **Server**: qps_capacity, latency_ms, max_connections, failure_rate
-- **Database**: type, connections, latency_ms, storage_gb
-- **Cache**: capacity_mb, eviction_policy, hit_rate, latency_ms
-- **API Gateway**: rate_limit, latency_ms, max_connections
-- **Message Queue**: type, throughput_mbps, retention_hours
-- **CDN**: edge_locations, cache_hit_rate, bandwidth_gbps
+## Technologies
 
-## 🤝 Contributing
+- **Backend**: Flask (Python)
+- **Frontend**: Vanilla JavaScript
+- **Styling**: CSS3 with CSS Variables
+- **Visualization**: SVG for connections, DOM for components
 
-Contributions are welcome! Feel free to:
+## License
 
-- Add new component types
-- Create more example templates
-- Improve the simulation engine
-- Enhance the UI/UX
-- Fix bugs
+MIT License
 
-## 📄 License
+## Contributing
 
-MIT License - feel free to use this for learning and teaching!
-
-## 🙏 Acknowledgments
-
-This tool was built to help developers learn system design concepts through hands-on experimentation. Inspired by real-world architectures from companies like Twitter, YouTube, Netflix, and Google.
+Feel free to submit issues and enhancement requests!
