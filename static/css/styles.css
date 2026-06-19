@@ -213,6 +213,14 @@ body {
     z-index: 1;
 }
 
+#connections-layer svg {
+    pointer-events: none;
+}
+
+#connections-layer path {
+    pointer-events: stroke;
+}
+
 #components-layer {
     position: absolute;
     top: 0;
@@ -436,4 +444,149 @@ body {
     .palette {
         width: 180px;
     }
+}
+
+/* Component status badge */
+.component-status {
+    position: absolute;
+    top: 5px;
+    right: 5px;
+    font-size: 10px;
+    padding: 2px 6px;
+    border-radius: 3px;
+    background: var(--accent-green);
+    color: white;
+    font-weight: bold;
+}
+
+.component-status.status-active {
+    background: var(--accent-green);
+}
+
+.component-status.status-dead {
+    background: var(--accent-red);
+}
+
+/* Modal styles */
+.modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.7);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+}
+
+.modal-content {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    max-width: 900px;
+    width: 90%;
+    max-height: 80vh;
+    overflow-y: auto;
+}
+
+.modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.modal-header h2 {
+    font-size: 18px;
+    color: var(--text-primary);
+}
+
+.close-btn {
+    background: none;
+    border: none;
+    color: var(--text-secondary);
+    font-size: 24px;
+    cursor: pointer;
+    padding: 0;
+    width: 30px;
+    height: 30px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.close-btn:hover {
+    color: var(--text-primary);
+}
+
+.dashboard-content {
+    padding: 20px;
+}
+
+.dashboard-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 16px;
+}
+
+.dashboard-card {
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 16px;
+}
+
+.dashboard-card h3 {
+    font-size: 14px;
+    color: var(--text-secondary);
+    margin-bottom: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.dashboard-stat-item {
+    display: flex;
+    justify-content: space-between;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--border-color);
+    font-size: 14px;
+}
+
+.dashboard-stat-item:last-child {
+    border-bottom: none;
+}
+
+.dashboard-stat-item .status-running {
+    color: var(--accent-green);
+    font-weight: bold;
+}
+
+.dashboard-stat-item .status-stopped {
+    color: var(--accent-yellow);
+    font-weight: bold;
+}
+
+.dashboard-stat-item .status-active {
+    color: var(--accent-green);
+    font-weight: bold;
+}
+
+.dashboard-stat-item .status-dead {
+    color: var(--accent-red);
+    font-weight: bold;
+}
+
+.dashboard-stat-item .health-healthy {
+    color: var(--accent-green);
+}
+
+.dashboard-stat-item .health-degraded {
+    color: var(--accent-yellow);
+}
+
+.dashboard-stat-item .health-unhealthy {
+    color: var(--accent-red);
 }

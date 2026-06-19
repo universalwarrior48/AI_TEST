@@ -82,7 +82,21 @@
         <footer class="status-bar">
             <span id="status-text">Ready</span>
             <span id="metrics-summary">Components: 0 | Connections: 0</span>
+            <button id="btn-dashboard" class="btn btn-secondary" style="margin-left: 10px;">📊 Dashboard</button>
         </footer>
+        
+        <!-- Dashboard Modal -->
+        <div id="dashboard-modal" class="modal" style="display: none;">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h2>📊 System Dashboard</h2>
+                    <button class="close-btn" onclick="closeDashboard()">×</button>
+                </div>
+                <div id="dashboard-content" class="dashboard-content">
+                    <!-- Dashboard content will be populated dynamically -->
+                </div>
+            </div>
+        </div>
     </div>
 
     <script src="{{ url_for('static', filename='js/component_types.js') }}"></script>

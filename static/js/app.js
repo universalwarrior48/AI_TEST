@@ -69,6 +69,7 @@ function initEventListeners() {
     document.getElementById('btn-export').addEventListener('click', exportConfig);
     document.getElementById('btn-connect').addEventListener('click', () => setMode('connect'));
     document.getElementById('btn-pan').addEventListener('click', () => setMode('pan'));
+    document.getElementById('btn-dashboard').addEventListener('click', openDashboard);
     
     // Template selection
     templateSelect.addEventListener('change', (e) => {
@@ -156,6 +157,7 @@ function renderComponent(component) {
             <span class="component-icon">${compType.icon}</span>
             <span>${component.name}</span>
         </div>
+        <div class="component-status" id="${component.id}-status-badge">Active</div>
         <div class="component-metrics">
             <div><span class="metric-label">QPS:</span> <span class="metric-value" id="${component.id}-qps">0</span></div>
             <div><span class="metric-label">Latency:</span> <span class="metric-value" id="${component.id}-latency">0ms</span></div>
@@ -380,7 +382,20 @@ function updateConnections() {
         path.setAttribute('class', 'connection-line');
         
         // Click to remove connection
-        path.addEventListener('click', () => {
+        path.addEventListener('click', (e) => {
+            if (confirm('Remove this connection?')) {
+                state.connections = state.connections.filter(
+                    c => !(c.from === conn.from && c.to === conn.to)
+                );
+                updateConnections();
+                updateMetricsSummary();
+                saveState();
+            }
+        });
+        
+        // Add context menu to delete connection
+        path.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
             if (confirm('Remove this connection?')) {
                 state.connections = state.connections.filter(
                     c => !(c.from === conn.from && c.to === conn.to)
@@ -449,6 +464,7 @@ function showProperties(componentId) {
         `;
     }
     
+    const isActive = component.active !== false;
     propertiesContent.innerHTML = `
         <div class="property-group">
             <label>Name</label>
@@ -458,12 +474,27 @@ function showProperties(componentId) {
             <label>Type</label>
             <input type="text" value="${compType.name}" disabled>
         </div>
+        <div class="property-group">
+            <label>Status</label>
+            <select id="prop-status" class="select-input">
+                <option value="active" ${isActive ? 'selected' : ''}>Active</option>
+                <option value="dead" ${!isActive ? 'selected' : ''}>Dead</option>
+            </select>
+        </div>
         <h4 style="margin: 16px 0 8px; color: var(--text-secondary);">Configuration</h4>
         ${configHtml}
         <button class="btn btn-danger" onclick="deleteComponent('${componentId}')" style="width: 100%; margin-top: 16px;">
             🗑 Delete Component
         </button>
     `;
+    
+    // Add status change handler
+    const statusSelect = document.getElementById('prop-status');
+    statusSelect.addEventListener('change', (e) => {
+        component.active = e.target.value === 'active';
+        updateComponentStatus(componentId, component.active);
+        saveState();
+    });
     
     // Add event listeners to inputs
     const nameInput = document.getElementById('prop-name');
@@ -589,6 +620,7 @@ function updateComponentMetrics(componentId, metrics) {
     const throughputEl = document.getElementById(`${componentId}-throughput`);
     const errorEl = document.getElementById(`${componentId}-error`);
     const healthEl = document.getElementById(`${componentId}-health`);
+    const statusBadgeEl = document.getElementById(`${componentId}-status-badge`);
     
     if (!qpsEl || !latencyEl || !throughputEl || !errorEl) return;
     
@@ -604,6 +636,25 @@ function updateComponentMetrics(componentId, metrics) {
         } else if (metrics.health === 'unhealthy') {
             healthEl.classList.add('unhealthy');
         }
+    }
+    
+    // Update status badge based on component active state
+    if (statusBadgeEl) {
+        const component = state.components[componentId];
+        const isActive = component && component.active !== false;
+        statusBadgeEl.textContent = isActive ? 'Active' : 'Dead';
+        statusBadgeEl.className = `component-status ${isActive ? 'status-active' : 'status-dead'}`;
+    }
+}
+
+/**
+ * Update component status badge display
+ */
+function updateComponentStatus(componentId, isActive) {
+    const statusBadgeEl = document.getElementById(`${componentId}-status-badge`);
+    if (statusBadgeEl) {
+        statusBadgeEl.textContent = isActive ? 'Active' : 'Dead';
+        statusBadgeEl.className = `component-status ${isActive ? 'status-active' : 'status-dead'}`;
     }
 }
 
@@ -736,6 +787,21 @@ function updateMetricsSummary() {
     const isRunning = simulationEngine.running ? 'Running' : 'Stopped';
     metricsSummary.textContent = `Components: ${compCount} | Connections: ${connCount} | Status: ${isRunning}`;
 }
+
+/**
+ * Close dashboard modal
+ */
+function closeDashboard() {
+    document.getElementById('dashboard-modal').style.display = 'none';
+}
+
+// Close dashboard when clicking outside
+window.addEventListener('click', (e) => {
+    const modal = document.getElementById('dashboard-modal');
+    if (e.target === modal) {
+        closeDashboard();
+    }
+});
 
 /**
  * Update status bar
