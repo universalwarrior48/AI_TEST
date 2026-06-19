@@ -525,19 +525,16 @@ async function startSimulation() {
     
     // Save state to backend and start simulation
     await saveState();
-    const response = await fetch('/api/state', {
+    fetch('/api/state', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ running: true })
     });
     
-    if (response.ok) {
-        simulationRunning = true;
-        simulationEngine.start(state.components, state.connections);
-        updateStatus('Simulation running');
-        document.getElementById('btn-start').disabled = true;
-        document.getElementById('btn-stop').disabled = false;
-    }
+    simulationEngine.start(state.components, state.connections);
+    updateStatus('Simulation running');
+    document.getElementById('btn-start').disabled = true;
+    document.getElementById('btn-stop').disabled = false;
 }
 
 /**
@@ -545,11 +542,16 @@ async function startSimulation() {
  */
 async function stopSimulation() {
     // Stop backend simulation
-    const response = await fetch('/api/state', {
+    await fetch('/api/state', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ running: false })
     });
+    
+    simulationEngine.stop();
+    updateStatus('Simulation stopped');
+    document.getElementById('btn-start').disabled = false;
+    document.getElementById('btn-stop').disabled = true;
     
     if (response.ok) {
         simulationRunning = false;
@@ -564,28 +566,17 @@ async function stopSimulation() {
         }
         updateMetricsSummary();
     }
+    updateMetricsSummary();
 }
 
 /**
  * Refresh metrics from simulation engine
  */
-async function refreshMetrics() {
-    // Get metrics from backend
-    try {
-        const response = await fetch('/api/metrics');
-        const backendMetrics = await response.json();
-        
-        // Use backend metrics if available, otherwise use local engine metrics
-        const metrics = Object.keys(backendMetrics).length > 0 ? backendMetrics : simulationEngine.getMetrics();
-        
-        for (const compId in metrics) {
-            updateComponentMetrics(compId, metrics[compId]);
-        }
-        
-        // Update status bar with running state
-        updateMetricsSummary();
-    } catch (e) {
-        console.error('Failed to refresh metrics:', e);
+function refreshMetrics() {
+    const metrics = simulationEngine.getMetrics();
+    
+    for (const compId in metrics) {
+        updateComponentMetrics(compId, metrics[compId]);
     }
 }
 
@@ -742,7 +733,7 @@ function loadSavedState() {
 function updateMetricsSummary() {
     const compCount = Object.keys(state.components).length;
     const connCount = state.connections.length;
-    const isRunning = simulationRunning ? 'Running' : 'Stopped';
+    const isRunning = simulationEngine.running ? 'Running' : 'Stopped';
     metricsSummary.textContent = `Components: ${compCount} | Connections: ${connCount} | Status: ${isRunning}`;
 }
 
