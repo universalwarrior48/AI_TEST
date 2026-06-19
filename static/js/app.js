@@ -69,6 +69,7 @@ function initEventListeners() {
     document.getElementById('btn-export').addEventListener('click', exportConfig);
     document.getElementById('btn-connect').addEventListener('click', () => setMode('connect'));
     document.getElementById('btn-pan').addEventListener('click', () => setMode('pan'));
+    document.getElementById('btn-dashboard').addEventListener('click', openDashboard);
     
     // Template selection
     templateSelect.addEventListener('change', (e) => {
@@ -156,6 +157,7 @@ function renderComponent(component) {
             <span class="component-icon">${compType.icon}</span>
             <span>${component.name}</span>
         </div>
+        <div class="component-status" id="${component.id}-status-badge">Active</div>
         <div class="component-metrics">
             <div><span class="metric-label">QPS:</span> <span class="metric-value" id="${component.id}-qps">0</span></div>
             <div><span class="metric-label">Latency:</span> <span class="metric-value" id="${component.id}-latency">0ms</span></div>
@@ -462,6 +464,7 @@ function showProperties(componentId) {
         `;
     }
     
+    const isActive = component.active !== false;
     propertiesContent.innerHTML = `
         <div class="property-group">
             <label>Name</label>
@@ -471,12 +474,27 @@ function showProperties(componentId) {
             <label>Type</label>
             <input type="text" value="${compType.name}" disabled>
         </div>
+        <div class="property-group">
+            <label>Status</label>
+            <select id="prop-status" class="select-input">
+                <option value="active" ${isActive ? 'selected' : ''}>Active</option>
+                <option value="dead" ${!isActive ? 'selected' : ''}>Dead</option>
+            </select>
+        </div>
         <h4 style="margin: 16px 0 8px; color: var(--text-secondary);">Configuration</h4>
         ${configHtml}
         <button class="btn btn-danger" onclick="deleteComponent('${componentId}')" style="width: 100%; margin-top: 16px;">
             🗑 Delete Component
         </button>
     `;
+    
+    // Add status change handler
+    const statusSelect = document.getElementById('prop-status');
+    statusSelect.addEventListener('change', (e) => {
+        component.active = e.target.value === 'active';
+        updateComponentStatus(componentId, component.active);
+        saveState();
+    });
     
     // Add event listeners to inputs
     const nameInput = document.getElementById('prop-name');
@@ -536,12 +554,20 @@ async function startSimulation() {
         return;
     }
     
+    // Mark all clients as active on start
+    for (const compId in state.components) {
+        const comp = state.components[compId];
+        if (comp.type === 'client') {
+            comp.active = true;
+        }
+    }
+    
     // Save state to backend and start simulation
     await saveState();
     const response = await fetch('/api/state', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ running: true })
+        body: JSON.stringify({ running: true, components: state.components })
     });
     
     if (response.ok) {
@@ -550,6 +576,9 @@ async function startSimulation() {
         updateStatus('Simulation running');
         document.getElementById('btn-start').disabled = true;
         document.getElementById('btn-stop').disabled = false;
+        
+        // Update start button text
+        document.getElementById('btn-start').textContent = '▶ Running...';
     }
 }
 
@@ -570,6 +599,9 @@ async function stopSimulation() {
         updateStatus('Simulation stopped');
         document.getElementById('btn-start').disabled = false;
         document.getElementById('btn-stop').disabled = true;
+        
+        // Restore start button text
+        document.getElementById('btn-start').textContent = '▶ Start';
         
         // Clear metrics display
         for (const compId in state.components) {
@@ -617,6 +649,7 @@ function updateComponentMetrics(componentId, metrics) {
     const throughputEl = document.getElementById(`${componentId}-throughput`);
     const errorEl = document.getElementById(`${componentId}-error`);
     const healthEl = document.getElementById(`${componentId}-health`);
+    const statusBadgeEl = document.getElementById(`${componentId}-status-badge`);
     
     if (!qpsEl || !latencyEl || !throughputEl || !errorEl) return;
     
@@ -632,6 +665,25 @@ function updateComponentMetrics(componentId, metrics) {
         } else if (metrics.health === 'unhealthy') {
             healthEl.classList.add('unhealthy');
         }
+    }
+    
+    // Update status badge based on component active state
+    if (statusBadgeEl) {
+        const component = state.components[componentId];
+        const isActive = component && component.active !== false;
+        statusBadgeEl.textContent = isActive ? 'Active' : 'Dead';
+        statusBadgeEl.className = `component-status ${isActive ? 'status-active' : 'status-dead'}`;
+    }
+}
+
+/**
+ * Update component status badge display
+ */
+function updateComponentStatus(componentId, isActive) {
+    const statusBadgeEl = document.getElementById(`${componentId}-status-badge`);
+    if (statusBadgeEl) {
+        statusBadgeEl.textContent = isActive ? 'Active' : 'Dead';
+        statusBadgeEl.className = `component-status ${isActive ? 'status-active' : 'status-dead'}`;
     }
 }
 
@@ -764,6 +816,109 @@ function updateMetricsSummary() {
     const isRunning = simulationRunning ? 'Running' : 'Stopped';
     metricsSummary.textContent = `Components: ${compCount} | Connections: ${connCount} | Status: ${isRunning}`;
 }
+
+/**
+ * Open dashboard modal
+ */
+function openDashboard() {
+    const modal = document.getElementById('dashboard-modal');
+    const content = document.getElementById('dashboard-content');
+    
+    // Calculate dashboard statistics
+    const totalComponents = Object.keys(state.components).length;
+    const activeComponents = Object.values(state.components).filter(c => c.active !== false).length;
+    const deadComponents = totalComponents - activeComponents;
+    const totalConnections = state.connections.length;
+    
+    // Get current metrics
+    const metrics = simulationEngine.getMetrics();
+    let totalQps = 0;
+    let totalThroughput = 0;
+    let avgLatency = 0;
+    let totalErrors = 0;
+    let healthyCount = 0;
+    let degradedCount = 0;
+    let unhealthyCount = 0;
+    
+    for (const compId in metrics) {
+        const m = metrics[compId];
+        totalQps += m.qps || 0;
+        totalThroughput += m.throughput || 0;
+        avgLatency += m.latency || 0;
+        totalErrors += m.errorRate || 0;
+        
+        if (m.health === 'healthy') healthyCount++;
+        else if (m.health === 'degraded') degradedCount++;
+        else unhealthyCount++;
+    }
+    
+    if (Object.keys(metrics).length > 0) {
+        avgLatency = Math.round(avgLatency / Object.keys(metrics).length);
+        totalErrors = Math.round(totalErrors / Object.keys(metrics).length * 100) / 100;
+    }
+    
+    // Component type breakdown
+    const typeCounts = {};
+    for (const comp of Object.values(state.components)) {
+        typeCounts[comp.type] = (typeCounts[comp.type] || 0) + 1;
+    }
+    
+    let typeBreakdownHtml = '';
+    for (const [type, count] of Object.entries(typeCounts)) {
+        const compType = getComponentType(type);
+        typeBreakdownHtml += `<div class="dashboard-stat-item"><span>${compType.icon} ${compType.name}</span><span>${count}</span></div>`;
+    }
+    
+    content.innerHTML = `
+        <div class="dashboard-grid">
+            <div class="dashboard-card">
+                <h3>System Overview</h3>
+                <div class="dashboard-stat-item"><span>Status:</span><span class="${simulationRunning ? 'status-running' : 'status-stopped'}">${simulationRunning ? 'Running' : 'Stopped'}</span></div>
+                <div class="dashboard-stat-item"><span>Total Components:</span><span>${totalComponents}</span></div>
+                <div class="dashboard-stat-item"><span>Active Components:</span><span class="status-active">${activeComponents}</span></div>
+                <div class="dashboard-stat-item"><span>Dead Components:</span><span class="status-dead">${deadComponents}</span></div>
+                <div class="dashboard-stat-item"><span>Connections:</span><span>${totalConnections}</span></div>
+            </div>
+            
+            <div class="dashboard-card">
+                <h3>Performance Metrics</h3>
+                <div class="dashboard-stat-item"><span>Total QPS:</span><span>${Math.round(totalQps)}</span></div>
+                <div class="dashboard-stat-item"><span>Total Throughput:</span><span>${Math.round(totalThroughput)}</span></div>
+                <div class="dashboard-stat-item"><span>Avg Latency:</span><span>${avgLatency}ms</span></div>
+                <div class="dashboard-stat-item"><span>Avg Error Rate:</span><span>${totalErrors}%</span></div>
+            </div>
+            
+            <div class="dashboard-card">
+                <h3>Health Status</h3>
+                <div class="dashboard-stat-item"><span class="health-healthy">Healthy:</span><span>${healthyCount}</span></div>
+                <div class="dashboard-stat-item"><span class="health-degraded">Degraded:</span><span>${degradedCount}</span></div>
+                <div class="dashboard-stat-item"><span class="health-unhealthy">Unhealthy:</span><span>${unhealthyCount}</span></div>
+            </div>
+            
+            <div class="dashboard-card">
+                <h3>Component Types</h3>
+                ${typeBreakdownHtml || '<div class="dashboard-stat-item"><span>No components added</span></div>'}
+            </div>
+        </div>
+    `;
+    
+    modal.style.display = 'flex';
+}
+
+/**
+ * Close dashboard modal
+ */
+function closeDashboard() {
+    document.getElementById('dashboard-modal').style.display = 'none';
+}
+
+// Close dashboard when clicking outside
+window.addEventListener('click', (e) => {
+    const modal = document.getElementById('dashboard-modal');
+    if (e.target === modal) {
+        closeDashboard();
+    }
+});
 
 /**
  * Update status bar

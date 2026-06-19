@@ -60,19 +60,28 @@ class SimulationEngine {
         this.metrics = {};
         for (const compId in this.components) {
             const comp = this.components[compId];
+            const isActive = comp.active !== false;
             this.metrics[compId] = {
                 qps: 0,
                 latency: comp.config.latency || 10,
                 throughput: 0,
                 errorRate: 0,
-                health: 'healthy',
+                health: isActive ? 'healthy' : 'unhealthy',
                 connections: 0
             };
+            
+            // Dead components have zero metrics
+            if (!isActive) {
+                this.metrics[compId].health = 'unhealthy';
+            }
         }
 
         // Simulate traffic flow from clients
         for (const compId in this.components) {
             const comp = this.components[compId];
+            
+            // Skip dead components
+            if (comp.active === false) continue;
             
             if (comp.type === 'client') {
                 // Client generates load
@@ -103,6 +112,10 @@ class SimulationEngine {
             if (!this.components[targetId] || !this.metrics[targetId]) continue;
 
             const targetComp = this.components[targetId];
+            
+            // Skip dead components - they don't process traffic
+            if (targetComp.active === false) continue;
+            
             const capacity = targetComp.config.qps || 1000;
             const failureRate = targetComp.config.failureRate || 0;
             const latency = targetComp.config.latency || 10;
