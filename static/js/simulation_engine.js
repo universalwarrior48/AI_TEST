@@ -206,7 +206,7 @@ class SimulationEngine {
         // Clear existing particles
         layer.innerHTML = '';
 
-        // Render each particle
+        // Render each particle along the connection path
         for (const particle of this.particles) {
             const element = document.createElement('div');
             element.className = 'particle';
@@ -216,11 +216,12 @@ class SimulationEngine {
             const endX = particle.to.x + 70;
             const endY = particle.to.y + 40;
 
+            // Calculate position along the curved path (approximate)
             const currentX = startX + (endX - startX) * particle.progress;
             const currentY = startY + (endY - startY) * particle.progress;
 
-            element.style.left = `${currentX}px`;
-            element.style.top = `${currentY}px`;
+            element.style.left = `${currentX - 4}px`;
+            element.style.top = `${currentY - 4}px`;
 
             layer.appendChild(element);
         }

@@ -599,6 +599,12 @@ async function refreshMetrics() {
         updateMetricsSummary();
     } catch (e) {
         console.error('Failed to refresh metrics:', e);
+        // Fallback to local engine metrics on error
+        const metrics = simulationEngine.getMetrics();
+        for (const compId in metrics) {
+            updateComponentMetrics(compId, metrics[compId]);
+        }
+        updateMetricsSummary();
     }
 }
 
