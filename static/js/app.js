@@ -554,32 +554,18 @@ async function startSimulation() {
         return;
     }
     
-    // Mark all clients as active on start
-    for (const compId in state.components) {
-        const comp = state.components[compId];
-        if (comp.type === 'client') {
-            comp.active = true;
-        }
-    }
-    
     // Save state to backend and start simulation
     await saveState();
-    const response = await fetch('/api/state', {
+    fetch('/api/state', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ running: true, components: state.components })
+        body: JSON.stringify({ running: true })
     });
     
-    if (response.ok) {
-        simulationRunning = true;
-        simulationEngine.start(state.components, state.connections);
-        updateStatus('Simulation running');
-        document.getElementById('btn-start').disabled = true;
-        document.getElementById('btn-stop').disabled = false;
-        
-        // Update start button text
-        document.getElementById('btn-start').textContent = '▶ Running...';
-    }
+    simulationEngine.start(state.components, state.connections);
+    updateStatus('Simulation running');
+    document.getElementById('btn-start').disabled = true;
+    document.getElementById('btn-stop').disabled = false;
 }
 
 /**
@@ -587,11 +573,16 @@ async function startSimulation() {
  */
 async function stopSimulation() {
     // Stop backend simulation
-    const response = await fetch('/api/state', {
+    await fetch('/api/state', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ running: false })
     });
+    
+    simulationEngine.stop();
+    updateStatus('Simulation stopped');
+    document.getElementById('btn-start').disabled = false;
+    document.getElementById('btn-stop').disabled = true;
     
     if (response.ok) {
         simulationRunning = false;
@@ -600,43 +591,23 @@ async function stopSimulation() {
         document.getElementById('btn-start').disabled = false;
         document.getElementById('btn-stop').disabled = true;
         
-        // Restore start button text
-        document.getElementById('btn-start').textContent = '▶ Start';
-        
         // Clear metrics display
         for (const compId in state.components) {
             updateComponentMetrics(compId, { qps: 0, latency: 0, throughput: 0, errorRate: 0, health: 'healthy' });
         }
         updateMetricsSummary();
     }
+    updateMetricsSummary();
 }
 
 /**
  * Refresh metrics from simulation engine
  */
-async function refreshMetrics() {
-    // Get metrics from backend
-    try {
-        const response = await fetch('/api/metrics');
-        const backendMetrics = await response.json();
-        
-        // Use backend metrics if available, otherwise use local engine metrics
-        const metrics = Object.keys(backendMetrics).length > 0 ? backendMetrics : simulationEngine.getMetrics();
-        
-        for (const compId in metrics) {
-            updateComponentMetrics(compId, metrics[compId]);
-        }
-        
-        // Update status bar with running state
-        updateMetricsSummary();
-    } catch (e) {
-        console.error('Failed to refresh metrics:', e);
-        // Fallback to local engine metrics on error
-        const metrics = simulationEngine.getMetrics();
-        for (const compId in metrics) {
-            updateComponentMetrics(compId, metrics[compId]);
-        }
-        updateMetricsSummary();
+function refreshMetrics() {
+    const metrics = simulationEngine.getMetrics();
+    
+    for (const compId in metrics) {
+        updateComponentMetrics(compId, metrics[compId]);
     }
 }
 
@@ -813,96 +784,8 @@ function loadSavedState() {
 function updateMetricsSummary() {
     const compCount = Object.keys(state.components).length;
     const connCount = state.connections.length;
-    const isRunning = simulationRunning ? 'Running' : 'Stopped';
+    const isRunning = simulationEngine.running ? 'Running' : 'Stopped';
     metricsSummary.textContent = `Components: ${compCount} | Connections: ${connCount} | Status: ${isRunning}`;
-}
-
-/**
- * Open dashboard modal
- */
-function openDashboard() {
-    const modal = document.getElementById('dashboard-modal');
-    const content = document.getElementById('dashboard-content');
-    
-    // Calculate dashboard statistics
-    const totalComponents = Object.keys(state.components).length;
-    const activeComponents = Object.values(state.components).filter(c => c.active !== false).length;
-    const deadComponents = totalComponents - activeComponents;
-    const totalConnections = state.connections.length;
-    
-    // Get current metrics
-    const metrics = simulationEngine.getMetrics();
-    let totalQps = 0;
-    let totalThroughput = 0;
-    let avgLatency = 0;
-    let totalErrors = 0;
-    let healthyCount = 0;
-    let degradedCount = 0;
-    let unhealthyCount = 0;
-    
-    for (const compId in metrics) {
-        const m = metrics[compId];
-        totalQps += m.qps || 0;
-        totalThroughput += m.throughput || 0;
-        avgLatency += m.latency || 0;
-        totalErrors += m.errorRate || 0;
-        
-        if (m.health === 'healthy') healthyCount++;
-        else if (m.health === 'degraded') degradedCount++;
-        else unhealthyCount++;
-    }
-    
-    if (Object.keys(metrics).length > 0) {
-        avgLatency = Math.round(avgLatency / Object.keys(metrics).length);
-        totalErrors = Math.round(totalErrors / Object.keys(metrics).length * 100) / 100;
-    }
-    
-    // Component type breakdown
-    const typeCounts = {};
-    for (const comp of Object.values(state.components)) {
-        typeCounts[comp.type] = (typeCounts[comp.type] || 0) + 1;
-    }
-    
-    let typeBreakdownHtml = '';
-    for (const [type, count] of Object.entries(typeCounts)) {
-        const compType = getComponentType(type);
-        typeBreakdownHtml += `<div class="dashboard-stat-item"><span>${compType.icon} ${compType.name}</span><span>${count}</span></div>`;
-    }
-    
-    content.innerHTML = `
-        <div class="dashboard-grid">
-            <div class="dashboard-card">
-                <h3>System Overview</h3>
-                <div class="dashboard-stat-item"><span>Status:</span><span class="${simulationRunning ? 'status-running' : 'status-stopped'}">${simulationRunning ? 'Running' : 'Stopped'}</span></div>
-                <div class="dashboard-stat-item"><span>Total Components:</span><span>${totalComponents}</span></div>
-                <div class="dashboard-stat-item"><span>Active Components:</span><span class="status-active">${activeComponents}</span></div>
-                <div class="dashboard-stat-item"><span>Dead Components:</span><span class="status-dead">${deadComponents}</span></div>
-                <div class="dashboard-stat-item"><span>Connections:</span><span>${totalConnections}</span></div>
-            </div>
-            
-            <div class="dashboard-card">
-                <h3>Performance Metrics</h3>
-                <div class="dashboard-stat-item"><span>Total QPS:</span><span>${Math.round(totalQps)}</span></div>
-                <div class="dashboard-stat-item"><span>Total Throughput:</span><span>${Math.round(totalThroughput)}</span></div>
-                <div class="dashboard-stat-item"><span>Avg Latency:</span><span>${avgLatency}ms</span></div>
-                <div class="dashboard-stat-item"><span>Avg Error Rate:</span><span>${totalErrors}%</span></div>
-            </div>
-            
-            <div class="dashboard-card">
-                <h3>Health Status</h3>
-                <div class="dashboard-stat-item"><span class="health-healthy">Healthy:</span><span>${healthyCount}</span></div>
-                <div class="dashboard-stat-item"><span class="health-degraded">Degraded:</span><span>${degradedCount}</span></div>
-                <div class="dashboard-stat-item"><span class="health-unhealthy">Unhealthy:</span><span>${unhealthyCount}</span></div>
-            </div>
-            
-            <div class="dashboard-card">
-                <h3>Component Types</h3>
-                ${typeBreakdownHtml || '<div class="dashboard-stat-item"><span>No components added</span></div>'}
-            </div>
-        </div>
-    `;
-    
-    modal.style.display = 'flex';
 }
 
 /**
