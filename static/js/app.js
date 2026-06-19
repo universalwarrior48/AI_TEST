@@ -175,8 +175,76 @@ function renderComponent(component) {
     // Component events
     element.addEventListener('mousedown', (e) => handleComponentMouseDown(e, component.id));
     element.addEventListener('dblclick', () => selectComponent(component.id));
+    element.addEventListener('contextmenu', (e) => handleComponentContextMenu(e, component.id));
     
     componentsLayer.appendChild(element);
+}
+
+/**
+ * Handle right-click context menu on component
+ */
+function handleComponentContextMenu(e, componentId) {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    const component = state.components[componentId];
+    if (!component) return;
+    
+    const menu = document.createElement('div');
+    menu.className = 'context-menu';
+    menu.style.position = 'absolute';
+    menu.style.left = `${e.clientX}px`;
+    menu.style.top = `${e.clientY}px`;
+    menu.style.background = '#1a1d24';
+    menu.style.border = '1px solid #2d3342';
+    menu.style.borderRadius = '6px';
+    menu.style.padding = '8px 0';
+    menu.style.boxShadow = '0 4px 12px rgba(0,0,0,0.3)';
+    menu.style.zIndex = '10000';
+    menu.innerHTML = `
+        <div class="context-menu-item" data-action="disconnect">🔌 Disconnect Component</div>
+        <div class="context-menu-item" data-action="delete">🗑 Delete Component</div>
+    `;
+    menu.style.color = '#e4e7eb';
+    menu.style.fontSize = '13px';
+    menu.style.cursor = 'pointer';
+    
+    document.body.appendChild(menu);
+    
+    // Add hover effects
+    const items = menu.querySelectorAll('.context-menu-item');
+    items.forEach(item => {
+        item.style.padding = '8px 16px';
+        item.style.transition = 'background 0.2s';
+        item.addEventListener('mouseenter', () => {
+            item.style.background = '#2d3342';
+        });
+        item.addEventListener('mouseleave', () => {
+            item.style.background = 'transparent';
+        });
+    });
+    
+    // Handle clicks
+    menu.querySelector('[data-action="disconnect"]').addEventListener('click', () => {
+        disconnectComponent(componentId);
+        document.body.removeChild(menu);
+    });
+    
+    menu.querySelector('[data-action="delete"]').addEventListener('click', () => {
+        deleteComponent(componentId);
+        document.body.removeChild(menu);
+    });
+    
+    // Close menu on click elsewhere
+    const closeMenu = () => {
+        if (document.body.contains(menu)) {
+            document.body.removeChild(menu);
+        }
+        document.removeEventListener('click', closeMenu);
+    };
+    setTimeout(() => {
+        document.addEventListener('click', closeMenu);
+    }, 100);
 }
 
 /**
@@ -184,6 +252,11 @@ function renderComponent(component) {
  */
 function handleComponentMouseDown(e, componentId) {
     e.stopPropagation();
+    
+    // Only allow left-click for dragging (button 0)
+    if (e.button !== 0) {
+        return;
+    }
     
     if (state.isConnecting) {
         handleConnectClick(componentId);
@@ -549,6 +622,28 @@ function deleteComponent(componentId) {
     updateConnections();
     updateMetricsSummary();
     saveState();
+}
+
+/**
+ * Disconnect component (remove all connections but keep component)
+ */
+function disconnectComponent(componentId) {
+    if (!confirm('Disconnect all connections from this component?')) return;
+    
+    // Remove associated connections
+    const beforeCount = state.connections.length;
+    state.connections = state.connections.filter(
+        c => c.from !== componentId && c.to !== componentId
+    );
+    
+    if (state.connections.length < beforeCount) {
+        updateConnections();
+        updateMetricsSummary();
+        saveState();
+        updateStatus('Component disconnected');
+    } else {
+        updateStatus('No connections to remove');
+    }
 }
 
 /**
