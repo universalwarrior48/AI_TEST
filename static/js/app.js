@@ -831,7 +831,7 @@ function loadTemplate(templateId) {
     
     // Register connections with simulation engine
     if (window.simulationEngine) {
-        window.simulationEngine.connections = [];
+        window.simulationEngine.clearConnections();
         for (const conn of template.connections) {
             window.simulationEngine.addConnection(conn);
         }

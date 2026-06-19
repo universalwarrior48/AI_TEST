@@ -271,10 +271,45 @@ class SimulationEngine {
     getMetrics() {
         return this.metrics;
     }
+
+    /**
+     * Add a connection to the simulation
+     */
+    addConnection(connection) {
+        // Check if connection already exists
+        const exists = this.connections.some(c => 
+            (c.from === connection.from && c.to === connection.to) ||
+            (c.from === connection.to && c.to === connection.from)
+        );
+        
+        if (!exists) {
+            this.connections.push(connection);
+        }
+    }
+
+    /**
+     * Remove a connection from the simulation
+     */
+    removeConnection(fromId, toId) {
+        this.connections = this.connections.filter(c => 
+            !((c.from === fromId && c.to === toId) ||
+              (c.from === toId && c.to === fromId))
+        );
+    }
+
+    /**
+     * Clear all connections
+     */
+    clearConnections() {
+        this.connections = [];
+    }
 }
 
 // Create global instance
 const simulationEngine = new SimulationEngine();
+
+// Expose to window for access from other scripts
+window.simulationEngine = simulationEngine;
 
 // Export for use in other modules
 if (typeof module !== 'undefined' && module.exports) {
