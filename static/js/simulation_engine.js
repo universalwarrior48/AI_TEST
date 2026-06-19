@@ -165,16 +165,20 @@ class SimulationEngine {
     updateParticles() {
         const now = Date.now();
         
-        // Spawn new particles from clients continuously while running
+        // Spawn new particles from ALL active components with outgoing connections
         for (const compId in this.components) {
             const comp = this.components[compId];
-            if (comp.type === 'client' && comp.active !== false) {
-                const qps = this.metrics[compId]?.qps || comp.config.qps || 100;
-                // Spawn particles based on QPS - higher QPS = more particles
-                const spawnRate = Math.min(qps / 100, 20);
-                if (Math.random() < spawnRate * 0.15) {
-                    this.spawnParticle(compId);
-                }
+            if (comp.active === false) continue;
+            
+            // Check if this component has outgoing connections
+            const hasOutgoing = this.connections.some(c => c.from === compId);
+            if (!hasOutgoing) continue;
+            
+            const qps = this.metrics[compId]?.qps || comp.config.qps || 10;
+            // Spawn particles based on QPS - higher QPS = more particles
+            const spawnRate = Math.min(qps / 50, 15);
+            if (Math.random() < spawnRate * 0.2) {
+                this.spawnParticle(compId);
             }
         }
 
@@ -184,17 +188,53 @@ class SimulationEngine {
             particle.progress += particle.speed;
 
             if (particle.progress >= 1) {
-                // Particle reached destination - handle special logic for cache/DB
+                // Particle reached destination
                 const targetComp = this.components[particle.connection.to];
+                const sourceComp = this.components[particle.connection.from];
                 
-                // For cache: on miss, spawn particle to DB and back
-                if (targetComp && targetComp.type === 'cache' && particle.from.type !== 'database') {
-                    const hitRate = targetComp.config.hitRate || 0.9;
+                // For cache: on miss, spawn particle to DB
+                if (targetComp && targetComp.type === 'cache') {
+                    const hitRate = targetComp.config.hitRate || 0.8;
                     if (Math.random() > hitRate) {
-                        // Cache miss - will be handled by next connection in chain
+                        // Cache miss - find connection from cache to DB and spawn particle
+                        const dbConnection = this.connections.find(c => 
+                            c.from === particle.connection.to && 
+                            this.components[c.to] && 
+                            this.components[c.to].type === 'database'
+                        );
+                        if (dbConnection) {
+                            const dbComp = this.components[dbConnection.to];
+                            this.particles.push({
+                                connection: dbConnection,
+                                from: targetComp,
+                                to: dbComp,
+                                progress: 0,
+                                speed: particle.speed,
+                                type: 'cache-miss'
+                            });
+                            
+                            // Also spawn return particle from DB to Cache
+                            setTimeout(() => {
+                                const returnConn = this.connections.find(c => 
+                                    c.from === dbConnection.to && c.to === dbConnection.from
+                                );
+                                // If no direct return connection, use the same connection reversed
+                                if (returnConn || dbConnection) {
+                                    this.particles.push({
+                                        connection: returnConn || {from: dbConnection.to, to: dbConnection.from},
+                                        from: dbComp,
+                                        to: targetComp,
+                                        progress: 0,
+                                        speed: particle.speed,
+                                        type: 'cache-response'
+                                    });
+                                }
+                            }, 200);
+                        }
                     }
                 }
                 
+                // Remove arrived particle
                 this.particles.splice(i, 1);
             }
         }
