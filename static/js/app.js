@@ -560,23 +560,11 @@ async function stopSimulation() {
 /**
  * Refresh metrics from simulation engine
  */
-async function refreshMetrics() {
-    // Get metrics from backend
-    try {
-        const response = await fetch('/api/metrics');
-        const backendMetrics = await response.json();
-        
-        // Use backend metrics if available, otherwise use local engine metrics
-        const metrics = Object.keys(backendMetrics).length > 0 ? backendMetrics : simulationEngine.getMetrics();
-        
-        for (const compId in metrics) {
-            updateComponentMetrics(compId, metrics[compId]);
-        }
-        
-        // Update status bar with running state
-        updateMetricsSummary();
-    } catch (e) {
-        console.error('Failed to refresh metrics:', e);
+function refreshMetrics() {
+    const metrics = simulationEngine.getMetrics();
+    
+    for (const compId in metrics) {
+        updateComponentMetrics(compId, metrics[compId]);
     }
 }
 
