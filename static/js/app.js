@@ -514,11 +514,19 @@ function deleteComponent(componentId) {
 /**
  * Start simulation
  */
-function startSimulation() {
+async function startSimulation() {
     if (Object.keys(state.components).length === 0) {
         updateStatus('Add components first');
         return;
     }
+    
+    // Save state to backend and start simulation
+    await saveState();
+    fetch('/api/state', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ running: true })
+    });
     
     simulationEngine.start(state.components, state.connections);
     updateStatus('Simulation running');
@@ -529,7 +537,14 @@ function startSimulation() {
 /**
  * Stop simulation
  */
-function stopSimulation() {
+async function stopSimulation() {
+    // Stop backend simulation
+    await fetch('/api/state', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ running: false })
+    });
+    
     simulationEngine.stop();
     updateStatus('Simulation stopped');
     document.getElementById('btn-start').disabled = false;
@@ -539,16 +554,29 @@ function stopSimulation() {
     for (const compId in state.components) {
         updateComponentMetrics(compId, { qps: 0, latency: 0, throughput: 0, errorRate: 0, health: 'healthy' });
     }
+    updateMetricsSummary();
 }
 
 /**
  * Refresh metrics from simulation engine
  */
-function refreshMetrics() {
-    const metrics = simulationEngine.getMetrics();
-    
-    for (const compId in metrics) {
-        updateComponentMetrics(compId, metrics[compId]);
+async function refreshMetrics() {
+    // Get metrics from backend
+    try {
+        const response = await fetch('/api/metrics');
+        const backendMetrics = await response.json();
+        
+        // Use backend metrics if available, otherwise use local engine metrics
+        const metrics = Object.keys(backendMetrics).length > 0 ? backendMetrics : simulationEngine.getMetrics();
+        
+        for (const compId in metrics) {
+            updateComponentMetrics(compId, metrics[compId]);
+        }
+        
+        // Update status bar with running state
+        updateMetricsSummary();
+    } catch (e) {
+        console.error('Failed to refresh metrics:', e);
     }
 }
 
