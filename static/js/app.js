@@ -424,6 +424,12 @@ function addConnection(fromId, toId) {
     }
     
     state.connections.push({ from: fromId, to: toId });
+    
+    // Also register with simulation engine for particle flow
+    if (window.simulationEngine) {
+        window.simulationEngine.addConnection({ from: fromId, to: toId });
+    }
+    
     updateConnections();
     updateMetricsSummary();
     updateStatus(`Connected ${state.components[fromId].name} → ${state.components[toId].name}`);
@@ -673,6 +679,13 @@ async function startSimulation() {
     
     if (response.ok) {
         simulationRunning = true;
+        
+        // Sync connections with simulation engine before starting
+        window.simulationEngine.connections = [];
+        for (const conn of state.connections) {
+            window.simulationEngine.addConnection(conn);
+        }
+        
         simulationEngine.start(state.components, state.connections);
         updateStatus('Simulation running');
         document.getElementById('btn-start').disabled = true;
@@ -810,6 +823,12 @@ function loadTemplate(templateId) {
     // Add connections
     state.connections = [...template.connections];
     updateConnections();
+    
+    // Register connections with simulation engine
+    window.simulationEngine.connections = [];
+    for (const conn of template.connections) {
+        window.simulationEngine.addConnection(conn);
+    }
     
     updateMetricsSummary();
     updateStatus(`Loaded template: ${template.name}`);
