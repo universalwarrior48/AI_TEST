@@ -12,7 +12,7 @@ const state = {
     isConnecting: false,
     connectSource: null,
     dragOffset: { x: 0, y: 0 },
-    panMode: true,
+    panMode: false,
     scale: 1,
     panOffset: { x: 0, y: 0 },
     isPanning: false,
@@ -86,6 +86,11 @@ function initPaletteDragDrop() {
         item.addEventListener('dragstart', (e) => {
             e.dataTransfer.setData('component-type', item.dataset.type);
             e.dataTransfer.effectAllowed = 'copy';
+        });
+        
+        // Reset drag state when drag ends
+        item.addEventListener('dragend', () => {
+            state.isDragging = false;
         });
     });
     
@@ -171,11 +176,6 @@ function handleComponentMouseDown(e, componentId) {
     
     if (state.isConnecting) {
         handleConnectClick(componentId);
-        return;
-    }
-    
-    if (state.panMode) {
-        selectComponent(componentId);
         return;
     }
     
@@ -294,8 +294,10 @@ function setMode(mode) {
     
     if (state.isConnecting) {
         updateStatus('Connect Mode: Click source component, then click target component');
-    } else {
+    } else if (state.panMode) {
         updateStatus('Pan Mode: Click and drag to pan, scroll to zoom');
+    } else {
+        updateStatus('Select Mode: Drag components to move, double-click to edit');
     }
 }
 
@@ -543,8 +545,6 @@ function stopSimulation() {
  * Refresh metrics from simulation engine
  */
 function refreshMetrics() {
-    if (!simulationEngine.running) return;
-    
     const metrics = simulationEngine.getMetrics();
     
     for (const compId in metrics) {
@@ -703,7 +703,8 @@ function loadSavedState() {
 function updateMetricsSummary() {
     const compCount = Object.keys(state.components).length;
     const connCount = state.connections.length;
-    metricsSummary.textContent = `Components: ${compCount} | Connections: ${connCount}`;
+    const isRunning = simulationEngine.running ? 'Running' : 'Stopped';
+    metricsSummary.textContent = `Components: ${compCount} | Connections: ${connCount} | Status: ${isRunning}`;
 }
 
 /**
