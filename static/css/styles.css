@@ -213,6 +213,14 @@ body {
     z-index: 1;
 }
 
+#connections-layer svg {
+    pointer-events: none;
+}
+
+#connections-layer path {
+    pointer-events: stroke;
+}
+
 #components-layer {
     position: absolute;
     top: 0;

@@ -380,7 +380,20 @@ function updateConnections() {
         path.setAttribute('class', 'connection-line');
         
         // Click to remove connection
-        path.addEventListener('click', () => {
+        path.addEventListener('click', (e) => {
+            if (confirm('Remove this connection?')) {
+                state.connections = state.connections.filter(
+                    c => !(c.from === conn.from && c.to === conn.to)
+                );
+                updateConnections();
+                updateMetricsSummary();
+                saveState();
+            }
+        });
+        
+        // Add context menu to delete connection
+        path.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
             if (confirm('Remove this connection?')) {
                 state.connections = state.connections.filter(
                     c => !(c.from === conn.from && c.to === conn.to)
