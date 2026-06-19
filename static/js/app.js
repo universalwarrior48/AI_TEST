@@ -41,6 +41,9 @@ document.addEventListener('DOMContentLoaded', () => {
     metricsSummary = document.getElementById('metrics-summary');
     templateSelect = document.getElementById('template-select');
 
+    // Initialize simulation engine immediately
+    window.simulationEngine = new SimulationEngine();
+    
     // Initialize event listeners
     initEventListeners();
     initPaletteDragDrop();
@@ -681,9 +684,11 @@ async function startSimulation() {
         simulationRunning = true;
         
         // Sync connections with simulation engine before starting
-        window.simulationEngine.connections = [];
-        for (const conn of state.connections) {
-            window.simulationEngine.addConnection(conn);
+        if (window.simulationEngine) {
+            window.simulationEngine.connections = [];
+            for (const conn of state.connections) {
+                window.simulationEngine.addConnection(conn);
+            }
         }
         
         simulationEngine.start(state.components, state.connections);
@@ -825,9 +830,11 @@ function loadTemplate(templateId) {
     updateConnections();
     
     // Register connections with simulation engine
-    window.simulationEngine.connections = [];
-    for (const conn of template.connections) {
-        window.simulationEngine.addConnection(conn);
+    if (window.simulationEngine) {
+        window.simulationEngine.connections = [];
+        for (const conn of template.connections) {
+            window.simulationEngine.addConnection(conn);
+        }
     }
     
     updateMetricsSummary();
