@@ -264,7 +264,19 @@ class SimulationEngine {
     }
 
     /**
-     * Render particles to DOM
+     * Get SVG path element for a connection
+     */
+    getPathElement(fromId, toId) {
+        // Look for path with data attributes
+        let path = document.querySelector(`path[data-from="${fromId}"][data-to="${toId}"]`);
+        if (!path) {
+            path = document.querySelector(`path[data-from="${toId}"][data-to="${fromId}"]`);
+        }
+        return path;
+    }
+
+    /**
+     * Render particles to DOM following SVG paths
      */
     renderParticles() {
         const layer = document.getElementById('particles-layer');
@@ -275,23 +287,59 @@ class SimulationEngine {
 
         // Render each particle along the connection path
         for (const particle of this.particles) {
-            const element = document.createElement('div');
-            element.className = 'particle';
-            
-            const startX = particle.from.x + 70;
-            const startY = particle.from.y + 40;
-            const endX = particle.to.x + 70;
-            const endY = particle.to.y + 40;
+            const pathEl = this.getPathElement(particle.from.id, particle.to.id);
+            if (!pathEl) {
+                // Fallback to straight line if path not found
+                this.renderFallbackParticle(layer, particle);
+                continue;
+            }
 
-            // Calculate position along the curved path (approximate)
-            const currentX = startX + (endX - startX) * particle.progress;
-            const currentY = startY + (endY - startY) * particle.progress;
+            try {
+                const length = pathEl.getTotalLength();
+                const point = pathEl.getPointAtLength(length * particle.progress);
 
-            element.style.left = `${currentX - 4}px`;
-            element.style.top = `${currentY - 4}px`;
+                const element = document.createElement('div');
+                element.className = 'particle';
+                
+                // Color based on type
+                if (particle.type === 'cache-miss') {
+                    element.style.backgroundColor = '#ff9800'; // Orange for cache miss
+                } else if (particle.type === 'cache-response') {
+                    element.style.backgroundColor = '#2196f3'; // Blue for response
+                } else {
+                    element.style.backgroundColor = '#00e676'; // Green for normal
+                }
 
-            layer.appendChild(element);
+                element.style.left = `${point.x - 4}px`;
+                element.style.top = `${point.y - 4}px`;
+
+                layer.appendChild(element);
+            } catch (e) {
+                // Fallback if path calculation fails
+                this.renderFallbackParticle(layer, particle);
+            }
         }
+    }
+
+    /**
+     * Fallback particle rendering using straight lines
+     */
+    renderFallbackParticle(layer, particle) {
+        const element = document.createElement('div');
+        element.className = 'particle';
+        
+        const startX = particle.from.x + 70;
+        const startY = particle.from.y + 40;
+        const endX = particle.to.x + 70;
+        const endY = particle.to.y + 40;
+
+        const currentX = startX + (endX - startX) * particle.progress;
+        const currentY = startY + (endY - startY) * particle.progress;
+
+        element.style.left = `${currentX - 4}px`;
+        element.style.top = `${currentY - 4}px`;
+
+        layer.appendChild(element);
     }
 
     /**
